@@ -1,0 +1,12 @@
+# Entorno virtual
+venv/
+
+# Archivo de variables locales
+.env
+
+# Archivos de Python compilados y cachés
+__pycache__/
+*.pyc
+
+# Carpeta de archivos estáticos recolectados
+staticfiles/
