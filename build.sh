@@ -13,4 +13,4 @@ python manage.py collectstatic --no-input
 
 # 4. Crear el superusuario de forma no interactiva
 #    (leerá las variables de entorno DJANGO_SUPERUSER...)
-python manage.py createsuperuser --noinput
+python manage.py create_admin_user
