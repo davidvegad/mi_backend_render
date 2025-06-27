@@ -85,10 +85,28 @@ MIDDLEWARE = [
 cors_urls_str = os.getenv('CORS_URLS', '')
 
 
+# core/settings.py
+
+# ...
+
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
 else:
-    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_urls_str.split(',') if origin.strip()]
+    # Lógica más robusta con variables de entorno separadas
+    CORS_ALLOWED_ORIGINS = []
+
+    # Busca todas las variables que empiecen con 'CORS_URL_'
+    for key, value in os.environ.items():
+        if key.startswith('CORS_URL_') and value:
+            CORS_ALLOWED_ORIGINS.append(value)
+
+    # Si la lista está vacía después de buscar, puedes añadir un valor por defecto o dejarla vacía
+    if not CORS_ALLOWED_ORIGINS:
+        print("⚠️ WARNING: No CORS URLs found in environment variables.")
+
+    print(f"✅ CORS origins configured: {CORS_ALLOWED_ORIGINS}")
+
+# ...
 
 
 # O, de forma más segura para producción:
