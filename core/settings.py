@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'corsheaders',
     # Mis apps
     'api',
+    'psychology_api',
 ]
 
 MIDDLEWARE = [
@@ -202,6 +203,14 @@ else:
     MEDIA_URL = '/media/'
     MEDIA_ROOT = BASE_DIR / 'media'
 
+
+# CONFIGURACIÓN DE EMAIL CON SENDGRID
+EMAIL_BACKEND = 'sendgrid_backend.SendgridBackend'
+SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL') # El email que verificaste en SendGrid
+CONTACT_FORM_RECIPIENT = os.environ.get('CONTACT_FORM_RECIPIENT') # El email donde recibirá los mensajes
+# AÑADE ESTA LÍNEA PARA DESACTIVAR EL MODO DE PRUEBA
+SENDGRID_SANDBOX_MODE_IN_DEBUG = False
 # Para servir los archivos desde una URL personalizada si la tienes
 # AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
 
