@@ -45,4 +45,12 @@ class ContactSubmissionSerializer(serializers.ModelSerializer):
 class SiteSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = SiteSettings
-        fields = ['default_whatsapp_number', 'default_whatsapp_message']        
+        # Añadimos los nuevos campos a la lista
+        fields = [
+            'default_whatsapp_number', 
+            'default_whatsapp_message',
+            'instagram_url',
+            'facebook_url',
+            'tiktok_url',
+            'youtube_url'
+        ]        

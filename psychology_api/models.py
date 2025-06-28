@@ -32,7 +32,7 @@ class Service(models.Model):
     whatsapp_number = models.CharField(
         max_length=20, 
         blank=True, 
-        help_text="Número de WhatsApp específico para este servicio (ej. 51947208124). Si se deja en blanco, se usará el número por defecto."
+        help_text="Número de WhatsApp específico para este servicio (ej. 51948362849). Si se deja en blanco, se usará el número por defecto."
     )
     whatsapp_message = models.TextField(
         blank=True, 
@@ -85,6 +85,7 @@ class ContactSubmission(models.Model):
         return f'Mensaje de {self.name} ({self.email})'
         
 class SiteSettings(models.Model):
+    # Campos que ya teníamos
     default_whatsapp_number = models.CharField(
         max_length=20, 
         blank=True, 
@@ -95,7 +96,13 @@ class SiteSettings(models.Model):
         help_text="El mensaje predeterminado de WhatsApp que se usará en toda la web."
     )
     
-    # Esta es la lógica para asegurar que solo se pueda crear UNA instancia
+    # --- CAMPOS NUEVOS PARA REDES SOCIALES ---
+    instagram_url = models.URLField(max_length=200, blank=True, help_text="URL completa del perfil de Instagram.")
+    facebook_url = models.URLField(max_length=200, blank=True, help_text="URL completa de la página de Facebook.")
+    tiktok_url = models.URLField(max_length=200, blank=True, help_text="URL completa del perfil de TikTok.")
+    youtube_url = models.URLField(max_length=200, blank=True, help_text="URL completa del canal de YouTube.")
+    # -------------------------------------------
+    
     def save(self, *args, **kwargs):
         if not self.pk and SiteSettings.objects.exists():
             raise ValidationError('Solo puede existir una instancia de SiteSettings.')
