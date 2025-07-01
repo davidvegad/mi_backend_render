@@ -156,14 +156,6 @@ STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-
-
-
-
-
-
-
-
 if 'AWS_STORAGE_BUCKET_NAME' in os.environ:
     
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
@@ -202,3 +194,5 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+RENDER_BUILD_HOOK_URL = os.environ.get('RENDER_BUILD_HOOK_URL')
