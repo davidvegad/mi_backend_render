@@ -15,33 +15,26 @@ import dj_database_url
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
-#Para probar en local
 from dotenv import load_dotenv
 load_dotenv()
-###############################
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+
+
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('SECRET_KEY')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-# SECURITY WARNING: don't run with debug turned on in production!
-#Para subir a Produccion
+
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
-#Para ejecutar en local
-#DEBUG = True
-print(DEBUG)
 
-ALLOWED_HOSTS = []  # <--- ESTA ES LA LÍNEA CLAVE QUE PROBABLEMENTE FALTA O ESTÁ MAL UBICADA
+ALLOWED_HOSTS = []
 
 
-# Si estamos en modo de desarrollo, permitimos el acceso local.
+
 if DEBUG:
     ALLOWED_HOSTS.extend(['127.0.0.1', 'localhost'])
     
@@ -65,55 +58,28 @@ INSTALLED_APPS = [
     # Mis apps
     'api',
     'psychology_api',
+    'servicios_web',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware', # Debe ir antes de CommonMiddleware
-    'django.middleware.common.CommonMiddleware',
 ]
-
-# Para desarrollo, puedes permitir todos los orígenes.
-# En producción, deberías ser más específico.
-cors_urls_str = os.getenv('CORS_URLS', '')
-
-
-# core/settings.py
-
-# ...
 
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
 else:
-    # Lógica más robusta con variables de entorno separadas
     CORS_ALLOWED_ORIGINS = []
-
-    # Busca todas las variables que empiecen con 'CORS_URL_'
     for key, value in os.environ.items():
         if key.startswith('CORS_URL_') and value:
             CORS_ALLOWED_ORIGINS.append(value)
-
-    # Si la lista está vacía después de buscar, puedes añadir un valor por defecto o dejarla vacía
-    if not CORS_ALLOWED_ORIGINS:
-        print("⚠️ WARNING: No CORS URLs found in environment variables.")
-
-    print(f"✅ CORS origins configured: {CORS_ALLOWED_ORIGINS}")
-
-# ...
-
-
-# O, de forma más segura para producción:
-# CORS_ALLOWED_ORIGINS = [
-#     "https://tumbesfutbolclub-frontend.onrender.com", # Tu futuro frontend
-#     "http://localhost:8000", # Para pruebas locales
-# ]
 
 
 ROOT_URLCONF = 'core.urls'
@@ -186,24 +152,24 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
-# core/settings.py
+
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
-# core/settings.py
 
-# ... al final del archivo
 
-# --- CONFIGURACIÓN DE ALMACENAMIENTO DE ARCHIVOS ---
+
+
+
+
+
 if 'AWS_STORAGE_BUCKET_NAME' in os.environ:
-    # Configuración de media en S3
+    
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
     AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
-    AWS_S3_REGION_NAME = 'us-east-2'  # O la región de tu bucket
+    AWS_S3_REGION_NAME = 'us-east-2'
     AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
     
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
@@ -212,12 +178,9 @@ if 'AWS_STORAGE_BUCKET_NAME' in os.environ:
     AWS_S3_FILE_OVERWRITE = False
     AWS_S3_ADDRESSING_STYLE = "auto"
     AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com'
-    print("==== S3 ACTIVE ====")
     MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
-    print("✅ S3 Storage for Media is Active.")
 else:
-# Configuración para desarrollo local si no hay credenciales de AWS
-    print("==== Local FileSystem Storage for Media is Active ====")
+
     MEDIA_URL = '/media/'
     MEDIA_ROOT = BASE_DIR / 'media'
 
@@ -225,20 +188,14 @@ else:
 # CONFIGURACIÓN DE EMAIL CON SENDGRID
 EMAIL_BACKEND = 'sendgrid_backend.SendgridBackend'
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL') # El email que verificaste en SendGrid
-CONTACT_FORM_RECIPIENT = os.environ.get('CONTACT_FORM_RECIPIENT') # El email donde recibirá los mensajes
-# AÑADE ESTA LÍNEA PARA DESACTIVAR EL MODO DE PRUEBA
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
+CONTACT_FORM_RECIPIENT = os.environ.get('CONTACT_FORM_RECIPIENT')
+
 SENDGRID_SANDBOX_MODE_IN_DEBUG = False
-# Para servir los archivos desde una URL personalizada si la tienes
-# AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
 
-# core/settings.py
-# ... al final del archivo, puede ser dentro de un bloque if not DEBUG
 
-# --- CONFIGURACIÓN DE SEGURIDAD PARA PRODUCCIÓN ---
-
-# Confiar en el dominio de Render para peticiones seguras (POST)
-CSRF_TRUSTED_ORIGINS = [f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}"]
+if RENDER_HOSTNAME:
+    CSRF_TRUSTED_ORIGINS = [f"https://{RENDER_HOSTNAME}"]
 
 # Forzar cookies seguras ya que estamos en HTTPS
 SESSION_COOKIE_SECURE = True
