@@ -226,5 +226,5 @@ class MercadoPagoWebhookView(APIView):
             logger.error(f"Error fetching payment details from Mercado Pago API for payment_id {payment_id}: {e}", exc_info=True)
             return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response(status=status.HTTP_200)
+        return Response(status=status.HTTP_200_OK)
 
