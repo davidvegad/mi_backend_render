@@ -9,3 +9,4 @@ boto3==1.34.140
 django-sendgrid-v5
 gunicorn
 mercadopago==2.3.0
+psycopg2-binary
