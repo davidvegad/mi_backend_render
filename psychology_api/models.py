@@ -109,4 +109,25 @@ class SiteSettings(models.Model):
         return super(SiteSettings, self).save(*args, **kwargs)
 
     def __str__(self):
-        return "Configuración General del Sitio"        
+        return "Configuración General del Sitio"
+
+# --- NUEVO MODELO PARA LIBROS ---
+class Book(models.Model):
+    title = models.CharField(max_length=200, help_text="Título del libro")
+    slug = models.SlugField(max_length=200, unique=True, help_text="Versión amigable para URL, ej: mi-libro-digital")
+    description = models.TextField(help_text="Descripción o sinopsis del libro.")
+    price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Precio de venta del libro.")
+    author = models.CharField(max_length=100, blank=True, help_text="Autor del libro, si no eres tú.")
+    
+    # Archivos en S3
+    cover_image = models.ImageField(upload_to='book_covers/', help_text="Imagen de portada del libro.", storage=s3_storage)
+    pdf_file = models.FileField(upload_to='book_pdfs/', help_text="Archivo PDF del libro (se mantendrá privado).", storage=s3_storage)
+    
+    is_published = models.BooleanField(default=True, help_text="Marcar para que el libro sea visible en la tienda.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title

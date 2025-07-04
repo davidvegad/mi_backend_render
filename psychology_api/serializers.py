@@ -1,7 +1,7 @@
 # psychology_api/serializers.py
 
 from rest_framework import serializers
-from .models import Profile, Service, Testimonial, Post, ContactSubmission, SiteSettings
+from .models import Profile, Service, Testimonial, Post, ContactSubmission, SiteSettings, Book
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -53,4 +53,12 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
             'facebook_url',
             'tiktok_url',
             'youtube_url'
-        ]        
+        ]
+
+# --- NUEVO SERIALIZER PARA LIBROS ---
+class BookSerializer(serializers.ModelSerializer):
+    cover_image_url = serializers.ImageField(source='cover_image', read_only=True)
+
+    class Meta:
+        model = Book
+        fields = ['id', 'title', 'slug', 'description', 'price', 'author', 'cover_image_url', 'is_published']

@@ -35,9 +35,8 @@ ALLOWED_HOSTS = []
 
 
 
-if DEBUG:
-    ALLOWED_HOSTS.extend(['127.0.0.1', 'localhost'])
-    
+ALLOWED_HOSTS.extend(['127.0.0.1', 'localhost'])
+
 RENDER_HOSTNAME = os.getenv('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_HOSTNAME)
@@ -185,6 +184,12 @@ CONTACT_FORM_RECIPIENT = os.environ.get('CONTACT_FORM_RECIPIENT')
 
 SENDGRID_SANDBOX_MODE_IN_DEBUG = False
 
+# --- CONFIGURACIÓN DE MERCADO PAGO ---
+MERCADOPAGO_ACCESS_TOKEN = os.environ.get('MERCADOPAGO_ACCESS_TOKEN')
+MERCADOPAGO_WEBHOOK_SECRET = os.environ.get('MERCADOPAGO_WEBHOOK_SECRET') # Opcional, para seguridad extra
+# -------------------------------------
+
+
 
 if RENDER_HOSTNAME:
     CSRF_TRUSTED_ORIGINS = [f"https://{RENDER_HOSTNAME}"]
@@ -196,3 +201,45 @@ CSRF_COOKIE_SECURE = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 RENDER_BUILD_HOOK_URL = os.environ.get('RENDER_BUILD_HOOK_URL')
+
+FRONTEND_URL = os.environ.get('FRONTEND_URL')
+
+# --- LOGGING CONFIGURATION ---
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'loggers': {
+        'psychology_api': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',
+    },
+}
+# -----------------------------
+
