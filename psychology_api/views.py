@@ -170,63 +170,61 @@ class MercadoPagoWebhookView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        if request.data.get("action") == "payment.created":
-            payment_id = request.data.get("data", {}).get("id")
-            sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
-            payment_info = sdk.payment().get(payment_id)["response"]
+        logger.info(f"Webhook received: {request.data}") # Log the full incoming webhook
 
+        action = request.data.get("action")
+        payment_id = request.data.get("data", {}).get("id")
+
+        if not payment_id:
+            logger.warning("Webhook received without payment ID.")
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        sdk = mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
+
+        try:
+            payment_response = sdk.payment().get(payment_id)
+            payment_info = payment_response.get("response") # Use .get() for safety
+
+            if not payment_info:
+                logger.error(f"Mercado Pago API call failed for payment_id {payment_id}. Response: {payment_response}")
+                return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            logger.info(f"Payment info from Mercado Pago API: {payment_info}")
+
+            # Process only approved payments
             if payment_info.get("status") == "approved":
                 book_id = payment_info.get("external_reference")
                 payer_email = payment_info.get("payer", {}).get("email")
-                
+
+                if not book_id or not payer_email:
+                    logger.error(f"Missing book_id or payer_email in approved payment info: {payment_info}")
+                    return Response(status=status.HTTP_400_BAD_REQUEST)
+
                 try:
                     book = Book.objects.get(id=int(book_id))
                     download_url = create_presigned_url(settings.AWS_STORAGE_BUCKET_NAME, book.pdf_file.name)
-                    
-                    # Enviar email con el enlace de descarga
-                    send_download_link_email(payer_email, book, download_url)
 
-                except (Book.DoesNotExist, ClientError) as e:
-                    logger.error(f"Error al procesar webhook para pago aprobado {payment_id}: {e}")
+                    if download_url:
+                        send_download_link_email(payer_email, book, download_url)
+                        logger.info(f"Download link sent for book {book.id} to {payer_email}")
+                    else:
+                        logger.error(f"Failed to generate presigned URL for book {book.id}")
+
+                except Book.DoesNotExist:
+                    logger.error(f"Book with ID {book_id} not found for approved payment {payment_id}.")
+                    return Response(status=status.HTTP_404_NOT_FOUND) 
+                except ClientError as e:
+                    logger.error(f"S3 ClientError processing webhook for payment {payment_id}: {e}")
+                    return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                except Exception as e: # Catch any other unexpected errors during processing
+                    logger.error(f"Unexpected error during webhook processing for payment {payment_id}: {e}", exc_info=True)
+                    return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            else:
+                logger.info(f"Payment {payment_id} status is not approved: {payment_info.get('status')}")
+
+        except Exception as e: # Catch errors from sdk.payment().get() or other initial processing
+            logger.error(f"Error fetching payment details from Mercado Pago API for payment_id {payment_id}: {e}", exc_info=True)
+            return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(status=status.HTTP_200)
 
-# --- FUNCIONES AUXILIARES ---
-
-def create_presigned_url(bucket_name, object_name, expiration=3600):
-    s3_client = boto3.client('s3', region_name=settings.AWS_S3_REGION_NAME)
-    try:
-        response = s3_client.generate_presigned_url('get_object',
-                                                    Params={'Bucket': bucket_name,
-                                                            'Key': object_name},
-                                                    ExpiresIn=expiration)
-    except ClientError as e:
-        logger.error(f"Error al generar URL pre-firmada: {e}")
-        return None
-    return response
-
-def send_download_link_email(user_email, book, download_url):
-    subject = f"Tu enlace de descarga para: {book.title}"
-    message = f"""
-    ¡Gracias por tu compra!
-
-    Aquí tienes tu enlace para descargar "{book.title}".
-    Este enlace es único y expirará en 1 hora.
-
-    Enlace de descarga: {download_url}
-
-    Si tienes algún problema, no dudes en contactarnos.
-
-    Saludos,
-    Psicóloga [Nombre]
-    """
-    try:
-        send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
-            [user_email],
-            fail_silently=False,
-        )
-    except Exception as e:
-        logger.error(f"Error al enviar email con enlace de descarga a {user_email}: {e}")
