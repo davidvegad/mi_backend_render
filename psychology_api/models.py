@@ -10,7 +10,7 @@ from storages.backends.s3boto3 import S3Boto3Storage
 s3_storage = S3Boto3Storage()
 
 class Profile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, help_text="Asociar con un usuario de Django para la psicóloga")
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='psychology_profile', help_text="Asociar con un usuario de Django para la psicóloga")
     bio = models.TextField(help_text="Biografía profesional de la psicóloga.")
     philosophy = models.TextField(help_text="Enfoque y filosofía de trabajo.")
     # Campo de imagen que se subirá a S3 a la carpeta 'profile_photos/'
