@@ -77,7 +77,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = (
-            'id', 'user', 'name', 'bio', 'avatar', 'slug', 
+            'id', 'user', 'name', 'bio', 'avatar', 'cover_image', 'slug', 
             'profile_type', 'purpose', 'template_style', 'theme', 
             'custom_gradient_start', 'custom_gradient_end', 'background_image',
             'background_preference', 'image_overlay',

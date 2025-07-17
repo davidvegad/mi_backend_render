@@ -11,6 +11,7 @@ class Profile(models.Model):
     name = models.CharField(max_length=100)
     bio = models.TextField()
     avatar = models.ImageField(upload_to='avatars/', storage=s3_storage, null=True, blank=True)
+    cover_image = models.ImageField(upload_to='covers/', storage=s3_storage, null=True, blank=True)
     slug = models.SlugField(unique=True, blank=True)
 
     # --- Campos de Personalización ---
