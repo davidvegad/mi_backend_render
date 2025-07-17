@@ -93,3 +93,40 @@ class Link(models.Model):
 
     def __str__(self):
         return self.title
+
+class SocialIcon(models.Model):
+    SOCIAL_TYPES = [
+        ('instagram', 'Instagram'),
+        ('facebook', 'Facebook'),
+        ('twitter', 'Twitter/X'),
+        ('linkedin', 'LinkedIn'),
+        ('youtube', 'YouTube'),
+        ('tiktok', 'TikTok'),
+        ('github', 'GitHub'),
+        ('discord', 'Discord'),
+        ('twitch', 'Twitch'),
+        ('spotify', 'Spotify'),
+        ('whatsapp', 'WhatsApp'),
+        ('telegram', 'Telegram'),
+        ('snapchat', 'Snapchat'),
+        ('pinterest', 'Pinterest'),
+        ('behance', 'Behance'),
+        ('dribbble', 'Dribbble'),
+        ('reddit', 'Reddit'),
+        ('email', 'Email'),
+        ('website', 'Website'),
+        ('other', 'Other'),
+    ]
+    
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='social_icons')
+    social_type = models.CharField(max_length=20, choices=SOCIAL_TYPES)
+    username = models.CharField(max_length=100, help_text="Username o ID de usuario")
+    url = models.URLField(help_text="URL completa del perfil social")
+    order = models.PositiveIntegerField(default=0, help_text="Orden de aparición")
+    
+    class Meta:
+        ordering = ['order']
+        unique_together = ['profile', 'social_type']  # Un solo icono por red social por perfil
+    
+    def __str__(self):
+        return f"{self.profile.name} - {self.get_social_type_display()}"
