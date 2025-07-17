@@ -59,6 +59,14 @@ def pre_save_profile_receiver(sender, instance, *args, **kwargs):
     if not instance.slug: # Only generate if slug is empty (new instance or explicitly cleared)
         if instance.name: # Ensure name exists to create a slug
             instance.slug = slugify(instance.name)
+    
+    # Asegurar que el slug sea único
+    if instance.slug:
+        original_slug = instance.slug
+        counter = 1
+        while Profile.objects.filter(slug=instance.slug).exclude(pk=instance.pk).exists():
+            instance.slug = f"{original_slug}-{counter}"
+            counter += 1
 
 pre_save.connect(pre_save_profile_receiver, sender=Profile)
 

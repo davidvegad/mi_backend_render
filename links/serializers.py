@@ -86,6 +86,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             'button_shadow_color', 'button_shadow_opacity', 'font_family',
             'links'
         )
+        read_only_fields = ('id', 'user')
         
     def update(self, instance, validated_data):
         # Extract links data directly from request.data if present
