@@ -5,8 +5,15 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .models import Profile, Link
-from .serializers import ProfileSerializer, LinkSerializer, UserRegistrationSerializer, CustomTokenObtainPairSerializer
+from .models import Profile, Link, ProfileView, LinkClick, SocialIcon, SocialIconClick
+from .serializers import (
+    ProfileSerializer, LinkSerializer, UserRegistrationSerializer, 
+    CustomTokenObtainPairSerializer, AnalyticsDetailedSerializer,
+    BasicAnalyticsSerializer, DeviceStatsSerializer, GeographyStatsSerializer,
+    DailyClicksSerializer, LinkClickSerializer
+)
+from .analytics_service import AnalyticsService
+from .utils import extract_request_metadata, should_track_request
 from django.shortcuts import get_object_or_404, redirect
 
 # Vista de prueba
@@ -27,8 +34,19 @@ class ProfileViewTracker(APIView):
 
     def post(self, request, slug, *args, **kwargs):
         profile = get_object_or_404(Profile, slug=slug)
+        
+        # Incrementar contador legacy (mantener compatibilidad)
         profile.views += 1
         profile.save()
+        
+        # Nuevo sistema de tracking detallado
+        if should_track_request(request):
+            metadata = extract_request_metadata(request)
+            ProfileView.objects.create(
+                profile=profile,
+                **metadata
+            )
+        
         return Response({'status': 'view tracked'}, status=status.HTTP_200_OK)
 
 class LinkClickTracker(APIView):
@@ -36,11 +54,24 @@ class LinkClickTracker(APIView):
 
     def get(self, request, link_id, *args, **kwargs):
         link = get_object_or_404(Link, id=link_id)
+        
+        # Incrementar contador legacy (mantener compatibilidad)
         link.clicks += 1
         link.save()
+        
+        # Nuevo sistema de tracking detallado
+        if should_track_request(request):
+            metadata = extract_request_metadata(request)
+            LinkClick.objects.create(
+                link=link,
+                profile=link.profile,
+                **metadata
+            )
+        
         return redirect(link.url)
 
 class AnalyticsView(APIView):
+    """Analytics básicos - mantiene compatibilidad con Analytics.tsx existente"""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
@@ -49,23 +80,11 @@ class AnalyticsView(APIView):
         except Profile.DoesNotExist:
             return Response({'detail': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        total_views = profile.views
-        total_clicks = sum(link.clicks for link in profile.links.all())
-
-        links_data = []
-        for link in profile.links.all().order_by('-clicks'):
-            links_data.append({
-                'id': link.id,
-                'title': link.title,
-                'url': link.url,
-                'clicks': link.clicks,
-            })
-
-        return Response({
-            'total_views': total_views,
-            'total_clicks': total_clicks,
-            'links_data': links_data,
-        }, status=status.HTTP_200_OK)
+        analytics_service = AnalyticsService(profile)
+        data = analytics_service.get_basic_analytics()
+        
+        serializer = BasicAnalyticsSerializer(data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
@@ -175,3 +194,171 @@ class LinkViewSet(viewsets.ModelViewSet):
                 return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({'detail': 'Links reordered successfully.'}, status=status.HTTP_200_OK)
+
+
+# ===== NUEVAS VISTAS DE ANALYTICS DETALLADOS =====
+
+class AnalyticsDetailedView(APIView):
+    """Analytics detallados para LinkAnalytics.tsx"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            profile = Profile.objects.get(user=request.user)
+        except Profile.DoesNotExist:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        time_range = request.query_params.get('time_range', '7d')
+        
+        analytics_service = AnalyticsService(profile)
+        data = analytics_service.get_detailed_analytics(time_range)
+        
+        serializer = AnalyticsDetailedSerializer(data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class DeviceAnalyticsView(APIView):
+    """Estadísticas específicas de dispositivos"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            profile = Profile.objects.get(user=request.user)
+        except Profile.DoesNotExist:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        time_range = request.query_params.get('time_range', '7d')
+        
+        analytics_service = AnalyticsService(profile)
+        data = analytics_service.get_device_stats(time_range)
+        
+        serializer = DeviceStatsSerializer(data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class GeographyAnalyticsView(APIView):
+    """Estadísticas específicas geográficas"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            profile = Profile.objects.get(user=request.user)
+        except Profile.DoesNotExist:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        time_range = request.query_params.get('time_range', '7d')
+        
+        analytics_service = AnalyticsService(profile)
+        data = analytics_service.get_geography_stats(time_range)
+        
+        serializer = GeographyStatsSerializer(data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class DailyClicksAnalyticsView(APIView):
+    """Clicks diarios"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            profile = Profile.objects.get(user=request.user)
+        except Profile.DoesNotExist:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        time_range = request.query_params.get('time_range', '7d')
+        
+        analytics_service = AnalyticsService(profile)
+        data = analytics_service.get_daily_clicks(time_range)
+        
+        serializer = DailyClicksSerializer(data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class RecentActivityView(APIView):
+    """Actividad reciente"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            profile = Profile.objects.get(user=request.user)
+        except Profile.DoesNotExist:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        limit = int(request.query_params.get('limit', 20))
+        
+        analytics_service = AnalyticsService(profile)
+        data = analytics_service.get_recent_activity(limit)
+        
+        serializer = LinkClickSerializer(data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class RealTimeMetricsView(APIView):
+    """Métricas en tiempo real"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            profile = Profile.objects.get(user=request.user)
+        except Profile.DoesNotExist:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        analytics_service = AnalyticsService(profile)
+        data = analytics_service.get_realtime_metrics()
+        
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class SocialMediaStatsView(APIView):
+    """Estadísticas de redes sociales"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            profile = Profile.objects.get(user=request.user)
+        except Profile.DoesNotExist:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        time_range = request.query_params.get('time_range', '7d')
+        
+        analytics_service = AnalyticsService(profile)
+        data = analytics_service.get_social_media_stats(time_range)
+        
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class SocialIconClickTracker(APIView):
+    """Tracker para clicks en iconos de redes sociales"""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, social_icon_id, *args, **kwargs):
+        print(f"[SocialIconTracker] Received click for social_icon_id: {social_icon_id}")
+        
+        try:
+            social_icon = get_object_or_404(SocialIcon, id=social_icon_id)
+            print(f"[SocialIconTracker] Found social icon: {social_icon.social_type} -> {social_icon.url}")
+            
+            # Tracking detallado
+            if should_track_request(request):
+                print("[SocialIconTracker] Request should be tracked")
+                metadata = extract_request_metadata(request)
+                print(f"[SocialIconTracker] Metadata: {metadata}")
+                
+                try:
+                    click_record = SocialIconClick.objects.create(
+                        social_icon=social_icon,
+                        profile=social_icon.profile,
+                        **metadata
+                    )
+                    print(f"[SocialIconTracker] Click recorded successfully: {click_record.id}")
+                except Exception as e:
+                    print(f"[SocialIconTracker] Error creating click record: {e}")
+            else:
+                print("[SocialIconTracker] Request should NOT be tracked")
+            
+            print(f"[SocialIconTracker] Redirecting to: {social_icon.url}")
+            return redirect(social_icon.url)
+            
+        except Exception as e:
+            print(f"[SocialIconTracker] Error: {e}")
+            return Response({'error': str(e)}, status=500)

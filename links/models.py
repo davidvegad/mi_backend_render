@@ -46,8 +46,9 @@ class Profile(models.Model):
     button_shadow_opacity = models.FloatField(default=1.0, help_text="Opacidad de la sombra del botón (0.0 a 1.0)") # Nuevo
     font_family = models.CharField(max_length=100, blank=True, null=True, default='font-inter', help_text="Clase CSS de la fuente seleccionada")
 
-    # --- Campos de Enlaces ---
-    
+    # --- Campos Avanzados ---
+    custom_css = models.TextField(blank=True, default='', help_text="CSS personalizado para el perfil")
+    animations = models.JSONField(default=list, blank=True, help_text="Configuración de animaciones del perfil")
 
     # --- Campos de Enlaces ---
     
@@ -130,3 +131,124 @@ class SocialIcon(models.Model):
     
     def __str__(self):
         return f"{self.profile.name} - {self.get_social_type_display()}"
+
+
+# ===== MODELOS DE ANALYTICS =====
+
+class ProfileView(models.Model):
+    """Registra cada vista a un perfil"""
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='profile_views')
+    timestamp = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    referrer = models.URLField(blank=True, null=True)
+    
+    # Información del dispositivo
+    device_type = models.CharField(max_length=20, blank=True, choices=[
+        ('mobile', 'Mobile'),
+        ('desktop', 'Desktop'),
+        ('tablet', 'Tablet'),
+    ])
+    
+    # Geolocalización (básica)
+    country = models.CharField(max_length=100, blank=True)
+    country_code = models.CharField(max_length=2, blank=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['profile', '-timestamp']),
+            models.Index(fields=['timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"Vista a {self.profile.name} - {self.timestamp.strftime('%Y-%m-%d %H:%M')}"
+
+
+class LinkClick(models.Model):
+    """Registra cada click en un enlace específico"""
+    link = models.ForeignKey(Link, on_delete=models.CASCADE, related_name='link_clicks')
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='all_link_clicks')
+    timestamp = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    referrer = models.URLField(blank=True, null=True)
+    
+    # Información del dispositivo
+    device_type = models.CharField(max_length=20, blank=True, choices=[
+        ('mobile', 'Mobile'),
+        ('desktop', 'Desktop'),
+        ('tablet', 'Tablet'),
+    ])
+    
+    # Geolocalización (básica)
+    country = models.CharField(max_length=100, blank=True)
+    country_code = models.CharField(max_length=2, blank=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['link', '-timestamp']),
+            models.Index(fields=['profile', '-timestamp']),
+            models.Index(fields=['timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"Click en {self.link.title} - {self.timestamp.strftime('%Y-%m-%d %H:%M')}"
+
+
+class SocialIconClick(models.Model):
+    """Registra cada click en un icono de red social específico"""
+    social_icon = models.ForeignKey(SocialIcon, on_delete=models.CASCADE, related_name='social_clicks')
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='all_social_clicks')
+    timestamp = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    referrer = models.URLField(blank=True, null=True)
+    
+    # Información del dispositivo
+    device_type = models.CharField(max_length=20, blank=True, choices=[
+        ('mobile', 'Mobile'),
+        ('desktop', 'Desktop'),
+        ('tablet', 'Tablet'),
+    ])
+    
+    # Geolocalización (básica)
+    country = models.CharField(max_length=100, blank=True)
+    country_code = models.CharField(max_length=2, blank=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['social_icon', '-timestamp']),
+            models.Index(fields=['profile', '-timestamp']),
+            models.Index(fields=['timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"Click en {self.social_icon.get_social_type_display()} - {self.timestamp.strftime('%Y-%m-%d %H:%M')}"
+
+
+class AnalyticsCache(models.Model):
+    """Cache para métricas calculadas pesadas"""
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='analytics_cache')
+    cache_key = models.CharField(max_length=100)  # Ej: "device_stats_7d", "geo_stats_30d"
+    time_range = models.CharField(max_length=10)  # 7d, 30d, 90d
+    data = models.JSONField()  # Datos calculados en formato JSON
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    
+    class Meta:
+        unique_together = ['profile', 'cache_key', 'time_range']
+        indexes = [
+            models.Index(fields=['profile', 'cache_key', 'time_range']),
+            models.Index(fields=['expires_at']),
+        ]
+    
+    def __str__(self):
+        return f"Cache {self.cache_key} para {self.profile.name}"
+    
+    @property
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() > self.expires_at

@@ -6,7 +6,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.http import QueryDict
 from rest_framework.parsers import JSONParser
 from io import BytesIO
-from .models import Profile, Link, SocialIcon
+from .models import Profile, Link, SocialIcon, ProfileView, LinkClick, AnalyticsCache
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -64,11 +64,26 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class LinkSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)  # Allow ID for updates
+    clicks = serializers.SerializerMethodField()  # Clicks reales de analytics
 
     class Meta:
         model = Link
-        fields = ('id', 'title', 'url', 'type', 'order')
+        fields = ('id', 'title', 'url', 'type', 'order', 'clicks')
         # El campo 'type' ahora es gestionado por el cliente.
+    
+    def get_clicks(self, obj):
+        """Obtener clicks reales del sistema de analytics"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Contar clicks de los últimos 30 días para mantener relevancia
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        real_clicks = LinkClick.objects.filter(
+            link=obj,
+            timestamp__gte=thirty_days_ago
+        ).count()
+        
+        return real_clicks
 
 class SocialIconSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(required=False)  # Allow ID for updates
@@ -92,6 +107,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             'button_style', 'button_color', 'button_text_color', 'button_text_opacity',
             'button_background_opacity', 'button_border_color', 'button_border_opacity',
             'button_shadow_color', 'button_shadow_opacity', 'font_family',
+            'custom_css', 'animations',
             'links', 'social_icons'
         )
         read_only_fields = ('id', 'user')
@@ -182,3 +198,65 @@ class ProfileSerializer(serializers.ModelSerializer):
                 icon.delete()
 
         return instance
+
+
+# ===== SERIALIZERS DE ANALYTICS =====
+
+class ProfileViewSerializer(serializers.ModelSerializer):
+    """Serializer para vistas de perfil"""
+    
+    class Meta:
+        model = ProfileView
+        fields = ('id', 'profile', 'timestamp', 'device_type', 'country', 'country_code')
+        read_only_fields = ('id', 'timestamp')
+
+
+class LinkClickSerializer(serializers.ModelSerializer):
+    """Serializer para clicks en enlaces"""
+    link_title = serializers.CharField(source='link.title', read_only=True)
+    
+    class Meta:
+        model = LinkClick
+        fields = ('id', 'link', 'link_title', 'timestamp', 'device_type', 'country', 'country_code')
+        read_only_fields = ('id', 'timestamp')
+
+
+class AnalyticsDetailedSerializer(serializers.Serializer):
+    """Serializer para analytics detallados"""
+    total_clicks = serializers.IntegerField()
+    total_views = serializers.IntegerField()
+    click_through_rate = serializers.FloatField()
+    top_performing_link = serializers.DictField(allow_null=True)
+    recent_clicks = LinkClickSerializer(many=True, read_only=True)
+    clicks_by_day = serializers.ListField(child=serializers.DictField())
+    clicks_by_device = serializers.ListField(child=serializers.DictField())
+    clicks_by_country = serializers.ListField(child=serializers.DictField())
+    clicks_by_category = serializers.ListField(child=serializers.DictField())
+
+
+class DeviceStatsSerializer(serializers.Serializer):
+    """Serializer para estadísticas de dispositivos"""
+    device = serializers.CharField()
+    clicks = serializers.IntegerField()
+    percentage = serializers.FloatField()
+
+
+class GeographyStatsSerializer(serializers.Serializer):
+    """Serializer para estadísticas geográficas"""
+    country = serializers.CharField()
+    country_code = serializers.CharField()
+    clicks = serializers.IntegerField()
+    flag = serializers.CharField()
+
+
+class DailyClicksSerializer(serializers.Serializer):
+    """Serializer para clicks diarios"""
+    date = serializers.CharField()
+    clicks = serializers.IntegerField()
+
+
+class BasicAnalyticsSerializer(serializers.Serializer):
+    """Serializer para analytics básicos (compatible con Analytics.tsx existente)"""
+    total_views = serializers.IntegerField()
+    total_clicks = serializers.IntegerField()
+    links_data = serializers.ListField(child=serializers.DictField())
