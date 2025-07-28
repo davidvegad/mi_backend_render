@@ -56,9 +56,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        # Add custom claims
-        token['name'] = user.first_name + " " + user.last_name if user.first_name and user.last_name else user.username
+        # Add custom claims with all user data needed by frontend
+        token['username'] = user.username
         token['email'] = user.email
+        token['first_name'] = user.first_name
+        token['last_name'] = user.last_name
+        token['name'] = user.first_name + " " + user.last_name if user.first_name and user.last_name else user.username
         return token
 
 

@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'psychology_api',
     'servicios_web',
     'links',
+    'timehub',
     'rest_framework_simplejwt',
 ]
 
