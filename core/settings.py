@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'servicios_web',
     'links',
     'timehub',
+    'task_manager',
     'rest_framework_simplejwt',
 ]
 

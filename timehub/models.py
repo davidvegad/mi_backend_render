@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User, Group
 from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
+from datetime import date, datetime
 import uuid
 
 
@@ -374,9 +375,41 @@ class AllocationSnapshotCell(models.Model):
         unique_together = ['snapshot', 'user', 'project']
 
 
+class Country(models.Model):
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=3, unique=True)  # ISO 3166-1 alpha-3
+    annual_vacation_days = models.PositiveIntegerField(default=30)
+    work_days = models.JSONField(default=list)  # [1,2,3,4,5] para lun-vie
+    timezone = models.CharField(max_length=50, default='UTC')
+    
+    # Días máximos por tipo de permiso según leyes del país
+    max_maternity_days = models.PositiveIntegerField(default=98, help_text="Días máximos de licencia por maternidad")
+    max_paternity_days = models.PositiveIntegerField(default=10, help_text="Días máximos de licencia por paternidad")
+    max_sick_days = models.PositiveIntegerField(default=30, help_text="Días máximos por enfermedad")
+    max_bereavement_days = models.PositiveIntegerField(default=3, help_text="Días máximos por luto")
+    max_personal_days = models.PositiveIntegerField(default=5, help_text="Días máximos de permiso personal")
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+    class Meta:
+        ordering = ['name']
+        verbose_name_plural = 'Countries'
+
+    def get_work_days_display(self):
+        """Retorna días laborables en formato legible"""
+        days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+        return [days[i-1] for i in self.work_days]
+
+
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='timehub_profile')
     employee_id = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    country = models.ForeignKey(Country, on_delete=models.SET_NULL, null=True, blank=True)
     department = models.CharField(max_length=100, blank=True)
     position = models.CharField(max_length=100, blank=True)
     hire_date = models.DateField(null=True, blank=True)
@@ -386,11 +419,12 @@ class UserProfile(models.Model):
         default=Decimal('40.00'),
         validators=[MinValueValidator(Decimal('0.00'))]
     )
-    leave_balance_days = models.DecimalField(
+    accumulated_vacation_days = models.DecimalField(
         max_digits=5, 
         decimal_places=2, 
         default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))]
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Días de vacaciones acumulados de años anteriores"
     )
     manager = models.ForeignKey(
         User, 
@@ -403,6 +437,84 @@ class UserProfile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    @property
+    def leave_balance_days(self):
+        """Calcula el balance de días de vacaciones disponibles"""
+        if not self.country:
+            return Decimal('0.00')
+        
+        # Días anuales según el país
+        annual_days = Decimal(str(self.country.annual_vacation_days))
+        
+        # Días acumulados de años anteriores
+        accumulated_days = self.accumulated_vacation_days or Decimal('0.00')
+        
+        # Días realmente consumidos este año (solo vacaciones que descuentan del balance y ya pasaron)
+        current_year = date.today().year
+        today = date.today()
+        used_days = Decimal('0.00')
+        
+        # Solo contar solicitudes aprobadas que ya terminaron
+        vacation_requests = self.user.leave_requests.filter(
+            leave_type__deducts_from_balance=True,
+            status='APPROVED',
+            start_date__year=current_year,
+            end_date__lt=today  # Solo días ya consumidos
+        )
+        
+        for request in vacation_requests:
+            used_days += Decimal(str(request.days_requested))
+        
+        # Balance total = días anuales + acumulados - usados
+        total_balance = annual_days + accumulated_days - used_days
+        
+        return max(total_balance, Decimal('0.00'))
+    
+    def get_leave_type_balance(self, leave_type_code):
+        """Obtiene el balance para un tipo específico de permiso"""
+        if not self.country:
+            return {'available': 0, 'used': 0, 'max_allowed': 0}
+        
+        current_year = date.today().year
+        
+        # Mapeo de códigos de tipo de permiso a campos del país
+        type_mapping = {
+            'MATERNITY': self.country.max_maternity_days,
+            'MAT': self.country.max_maternity_days,  # Compatibilidad con código existente
+            'PATERNITY': self.country.max_paternity_days,
+            'ENF': self.country.max_sick_days,  # Código existente para enfermedad
+            'SICK': self.country.max_sick_days,
+            'BEREAVEMENT': self.country.max_bereavement_days,
+            'PER': self.country.max_personal_days,  # Código existente para personal
+            'PERSONAL': self.country.max_personal_days,
+        }
+        
+        # Días realmente consumidos este año (solicitudes aprobadas que ya pasaron)
+        today = date.today()
+        used_requests = self.user.leave_requests.filter(
+            leave_type__code=leave_type_code,
+            status='APPROVED',
+            start_date__year=current_year,
+            end_date__lt=today  # Solo contar días que ya pasaron
+        )
+        
+        used_days = sum(request.days_requested for request in used_requests)
+        
+        if leave_type_code in ['VACATION', 'VAC']:
+            # Para vacaciones, usar el balance calculado
+            available = float(self.leave_balance_days)
+            max_allowed = self.country.annual_vacation_days + float(self.accumulated_vacation_days or 0)
+        else:
+            # Para otros tipos, usar límites del país
+            max_allowed = type_mapping.get(leave_type_code, 0)
+            available = max(max_allowed - used_days, 0)
+        
+        return {
+            'available': available,
+            'used': used_days,
+            'max_allowed': max_allowed
+        }
+
     def __str__(self):
         return f"{self.user.username} Profile"
 
@@ -411,19 +523,20 @@ class UserProfile(models.Model):
 
 
 class Holiday(models.Model):
+    country = models.ForeignKey(Country, on_delete=models.CASCADE, related_name='holidays', null=True, blank=True)
     name = models.CharField(max_length=200)
     date = models.DateField()
-    is_recurring = models.BooleanField(default=False)
+    is_recurring = models.BooleanField(default=False)  # True para feriados anuales como Navidad
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.name} - {self.date}"
+        country_code = self.country.code if self.country else 'GLOBAL'
+        return f"{country_code} - {self.name} - {self.date}"
 
     class Meta:
-        unique_together = ['name', 'date']
-        ordering = ['date']
+        ordering = ['country', 'date']
 
 
 class AuditLog(models.Model):

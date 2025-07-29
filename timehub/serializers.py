@@ -4,8 +4,20 @@ from .models import (
     Client, Project, Assignment, Period, PeriodLock, TimeEntry,
     LeaveType, LeaveRequest, PlannedAllocation, Meeting,
     PortfolioSnapshot, PortfolioSnapshotRow, AllocationSnapshot,
-    AllocationSnapshotCell, UserProfile, Holiday, AuditLog
+    AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country
 )
+
+
+class CountrySerializer(serializers.ModelSerializer):
+    work_days_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Country
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+    
+    def get_work_days_display(self, obj):
+        return obj.get_work_days_display()
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -109,18 +121,87 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.username', read_only=True)
     leave_type_name = serializers.CharField(source='leave_type.name', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.username', read_only=True)
+    business_days = serializers.SerializerMethodField()
+    conflicts = serializers.SerializerMethodField()
+    holidays_in_range = serializers.SerializerMethodField()
     
     class Meta:
         model = LeaveRequest
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at', 'approved_by', 'approved_at', 'current_approval_level']
 
+    def get_business_days(self, obj):
+        """Calcula días laborables en el rango de fechas"""
+        from .utils import calculate_vacation_days_needed
+        if obj.start_date and obj.end_date and obj.user:
+            calendar_days, business_days = calculate_vacation_days_needed(
+                obj.start_date, obj.end_date, obj.user.id
+            )
+            return {
+                'calendar_days': calendar_days,
+                'business_days': business_days
+            }
+        return None
+
+    def get_conflicts(self, obj):
+        """Verifica conflictos con otras solicitudes"""
+        from .utils import check_vacation_conflicts
+        if obj.start_date and obj.end_date and obj.user:
+            return check_vacation_conflicts(
+                obj.start_date, obj.end_date, obj.user.id, obj.id
+            )
+        return []
+
+    def get_holidays_in_range(self, obj):
+        """Obtiene feriados en el rango de fechas"""
+        from .utils import get_holidays_in_range
+        if obj.start_date and obj.end_date and obj.user:
+            try:
+                user_profile = UserProfile.objects.get(user=obj.user)
+                if user_profile.country:
+                    return get_holidays_in_range(
+                        obj.start_date, obj.end_date, user_profile.country
+                    )
+            except UserProfile.DoesNotExist:
+                pass
+        return []
+
     def validate(self, data):
+        from .utils import check_vacation_conflicts, calculate_vacation_days_needed
+        
         start_date = data.get('start_date')
         end_date = data.get('end_date')
+        user = data.get('user')
         
         if start_date and end_date and start_date > end_date:
             raise serializers.ValidationError("La fecha de inicio no puede ser posterior a la fecha de fin.")
+        
+        # Validar conflictos solo si tenemos todos los datos necesarios
+        if start_date and end_date and user:
+            # Excluir la solicitud actual si estamos editando
+            exclude_id = self.instance.id if self.instance else None
+            conflicts = check_vacation_conflicts(start_date, end_date, user.id, exclude_id)
+            
+            if conflicts:
+                conflict_details = []
+                for conflict in conflicts:
+                    conflict_details.append(
+                        f"{conflict['leave_type']}: {conflict['start_date']} - {conflict['end_date']} "
+                        f"({conflict['overlap_days']} días de solapamiento)"
+                    )
+                raise serializers.ValidationError(
+                    f"Conflicto con solicitudes existentes: {'; '.join(conflict_details)}"
+                )
+            
+            # Calcular días requeridos y actualizar automáticamente
+            calendar_days, business_days = calculate_vacation_days_needed(start_date, end_date, user.id)
+            
+            # Usar días laborables para tipos que descuentan del balance
+            leave_type = data.get('leave_type')
+            if leave_type and leave_type.deducts_from_balance:
+                data['days_requested'] = business_days
+            else:
+                data['days_requested'] = calendar_days
         
         return data
 
@@ -190,14 +271,26 @@ class AllocationSnapshotSerializer(serializers.ModelSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.username', read_only=True)
     manager_name = serializers.CharField(source='manager.username', read_only=True)
+    country_name = serializers.CharField(source='country.name', read_only=True)
+    country_code = serializers.CharField(source='country.code', read_only=True)
+    total_vacation_days = serializers.SerializerMethodField()
     
     class Meta:
         model = UserProfile
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
+    
+    def get_total_vacation_days(self, obj):
+        """Calcula el total de días de vacaciones incluyendo acumulados"""
+        base_days = float(obj.leave_balance_days)
+        accumulated_days = float(obj.accumulated_vacation_days)
+        return base_days + accumulated_days
 
 
 class HolidaySerializer(serializers.ModelSerializer):
+    country_name = serializers.CharField(source='country.name', read_only=True)
+    country_code = serializers.CharField(source='country.code', read_only=True)
+    
     class Meta:
         model = Holiday
         fields = '__all__'

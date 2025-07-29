@@ -3,7 +3,7 @@ from .models import (
     Client, Project, Assignment, Period, PeriodLock, TimeEntry,
     LeaveType, LeaveRequest, PlannedAllocation, Meeting,
     PortfolioSnapshot, PortfolioSnapshotRow, AllocationSnapshot,
-    AllocationSnapshotCell, UserProfile, Holiday, AuditLog
+    AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country
 )
 
 
@@ -101,19 +101,28 @@ class AllocationSnapshotAdmin(admin.ModelAdmin):
     ordering = ['-snapshot_date']
 
 
+@admin.register(Country)
+class CountryAdmin(admin.ModelAdmin):
+    list_display = ['code', 'name', 'annual_vacation_days', 'timezone', 'is_active']
+    list_filter = ['is_active']
+    search_fields = ['code', 'name']
+    ordering = ['name']
+
+
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'employee_id', 'department', 'position', 'weekly_hours', 'is_active']
-    list_filter = ['department', 'is_active', 'hire_date']
+    list_display = ['user', 'employee_id', 'country', 'department', 'position', 'weekly_hours', 'is_active']
+    list_filter = ['country', 'department', 'is_active', 'hire_date']
     search_fields = ['user__username', 'employee_id']
     raw_id_fields = ['user', 'manager']
 
 
 @admin.register(Holiday)
 class HolidayAdmin(admin.ModelAdmin):
-    list_display = ['name', 'date', 'is_recurring', 'is_active']
-    list_filter = ['is_recurring', 'is_active', 'date']
-    ordering = ['date']
+    list_display = ['country', 'name', 'date', 'is_recurring', 'is_active']
+    list_filter = ['country', 'is_recurring', 'is_active', 'date']
+    search_fields = ['name', 'country__name']
+    ordering = ['country', 'date']
 
 
 @admin.register(AuditLog)

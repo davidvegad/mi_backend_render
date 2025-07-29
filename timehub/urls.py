@@ -6,7 +6,9 @@ from .views import (
     ClientViewSet, ProjectViewSet, AssignmentViewSet, 
     PeriodViewSet, TimeEntryViewSet, LeaveTypeViewSet, 
     LeaveRequestViewSet, PlannedAllocationViewSet, MeetingViewSet,
-    UserProfileViewSet, HolidayViewSet, AuditLogViewSet, UserViewSet
+    UserProfileViewSet, HolidayViewSet, AuditLogViewSet, UserViewSet,
+    LeaveBalanceViewSet, LeaveCalendarViewSet, ProjectAssignmentViewSet,
+    CountryViewSet
 )
 
 app_name = 'timehub'
@@ -25,6 +27,10 @@ router.register(r'user-profiles', UserProfileViewSet)
 router.register(r'holidays', HolidayViewSet)
 router.register(r'audit-logs', AuditLogViewSet)
 router.register(r'users', UserViewSet)
+router.register(r'countries', CountryViewSet)
+router.register(r'leave-balance', LeaveBalanceViewSet, basename='leave-balance')
+router.register(r'leave-calendar', LeaveCalendarViewSet, basename='leave-calendar') 
+router.register(r'project-assignments', ProjectAssignmentViewSet, basename='project-assignments')
 
 urlpatterns = [
     # Auth endpoints
