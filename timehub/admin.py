@@ -3,7 +3,7 @@ from .models import (
     Client, Project, Assignment, Period, PeriodLock, TimeEntry,
     LeaveType, LeaveRequest, PlannedAllocation, Meeting,
     PortfolioSnapshot, PortfolioSnapshotRow, AllocationSnapshot,
-    AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country
+    AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country, Role
 )
 
 
@@ -123,6 +123,15 @@ class HolidayAdmin(admin.ModelAdmin):
     list_filter = ['country', 'is_recurring', 'is_active', 'date']
     search_fields = ['name', 'country__name']
     ordering = ['country', 'date']
+
+
+@admin.register(Role)
+class RoleAdmin(admin.ModelAdmin):
+    list_display = ['name', 'code', 'is_active', 'description', 'created_at']
+    list_filter = ['is_active', 'created_at']
+    search_fields = ['name', 'code', 'description']
+    ordering = ['name']
+    readonly_fields = ['created_at', 'updated_at']
 
 
 @admin.register(AuditLog)

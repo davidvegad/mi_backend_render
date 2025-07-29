@@ -4,7 +4,7 @@ from .models import (
     Client, Project, Assignment, Period, PeriodLock, TimeEntry,
     LeaveType, LeaveRequest, PlannedAllocation, Meeting,
     PortfolioSnapshot, PortfolioSnapshotRow, AllocationSnapshot,
-    AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country
+    AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country, Role
 )
 
 
@@ -20,11 +20,47 @@ class CountrySerializer(serializers.ModelSerializer):
         return obj.get_work_days_display()
 
 
+class RoleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Role
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+
 class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False)
+    
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'password', 'is_active']
         read_only_fields = ['id']
+        extra_kwargs = {
+            'password': {'write_only': True}
+        }
+    
+    def create(self, validated_data):
+        password = validated_data.pop('password', None)
+        # Usar email como username si no se proporciona username
+        if not validated_data.get('username'):
+            validated_data['username'] = validated_data['email']
+        
+        user = User.objects.create(**validated_data)
+        if password:
+            user.set_password(password)
+            user.save()
+        return user
+    
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        if password:
+            instance.set_password(password)
+        
+        instance.save()
+        return instance
 
 
 class ClientSerializer(serializers.ModelSerializer):
@@ -269,22 +305,61 @@ class AllocationSnapshotSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    user_details = UserSerializer(source='user', read_only=True)
     user_name = serializers.CharField(source='user.username', read_only=True)
     manager_name = serializers.CharField(source='manager.username', read_only=True)
     country_name = serializers.CharField(source='country.name', read_only=True)
     country_code = serializers.CharField(source='country.code', read_only=True)
+    roles = RoleSerializer(many=True, read_only=True)
+    role_ids = serializers.PrimaryKeyRelatedField(
+        many=True, 
+        queryset=Role.objects.all(), 
+        source='roles', 
+        write_only=True,
+        required=False
+    )
     total_vacation_days = serializers.SerializerMethodField()
     
     class Meta:
         model = UserProfile
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
+        extra_kwargs = {
+            'user': {'required': False}  # Hacer que user no sea requerido en el serializer
+        }
     
     def get_total_vacation_days(self, obj):
         """Calcula el total de días de vacaciones incluyendo acumulados"""
         base_days = float(obj.leave_balance_days)
         accumulated_days = float(obj.accumulated_vacation_days)
         return base_days + accumulated_days
+
+    def create(self, validated_data):
+        roles_data = validated_data.pop('roles', [])
+        
+        # Verificar que el campo user esté presente para crear
+        if 'user' not in validated_data:
+            raise serializers.ValidationError('El campo user es requerido para crear un perfil')
+        
+        user_profile = UserProfile.objects.create(**validated_data)
+        if roles_data:
+            user_profile.roles.set(roles_data)
+        return user_profile
+
+    def update(self, instance, validated_data):
+        roles_data = validated_data.pop('roles', None)
+        
+        # No actualizar el campo user en updates
+        validated_data.pop('user', None)
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        if roles_data is not None:
+            instance.roles.set(roles_data)
+        
+        return instance
 
 
 class HolidaySerializer(serializers.ModelSerializer):

@@ -11,7 +11,7 @@ from .models import (
     Client, Project, Assignment, Period, PeriodLock, TimeEntry,
     LeaveType, LeaveRequest, PlannedAllocation, Meeting,
     PortfolioSnapshot, PortfolioSnapshotRow, AllocationSnapshot,
-    AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country
+    AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country, Role
 )
 from .serializers import (
     ClientSerializer, ProjectSerializer, AssignmentSerializer,
@@ -21,7 +21,7 @@ from .serializers import (
     UserProfileSerializer, HolidaySerializer, AuditLogSerializer,
     TimeEntrySubmitSerializer, TimeEntryApprovalSerializer,
     LeaveRequestApprovalSerializer, PeriodCloseSerializer, UserSerializer,
-    CountrySerializer
+    CountrySerializer, RoleSerializer
 )
 
 
@@ -491,7 +491,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
 
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
+class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -518,6 +518,19 @@ class CountryViewSet(viewsets.ModelViewSet):
         if is_active is not None:
             queryset = queryset.filter(is_active=is_active.lower() == 'true')
             
+        return queryset
+
+
+class RoleViewSet(viewsets.ModelViewSet):
+    queryset = Role.objects.all()
+    serializer_class = RoleSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = Role.objects.all()
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
         return queryset
 
 

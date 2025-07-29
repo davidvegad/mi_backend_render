@@ -406,6 +406,22 @@ class Country(models.Model):
         return [days[i-1] for i in self.work_days]
 
 
+class Role(models.Model):
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=50, unique=True)
+    description = models.TextField(blank=True)
+    permissions = models.JSONField(default=list, help_text="Lista de permisos del rol")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+    class Meta:
+        ordering = ['name']
+
+
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='timehub_profile')
     employee_id = models.CharField(max_length=50, unique=True, null=True, blank=True)
@@ -433,6 +449,8 @@ class UserProfile(models.Model):
         blank=True, 
         related_name='managed_employees'
     )
+    roles = models.ManyToManyField(Role, blank=True, related_name='user_profiles')
+    phone = models.CharField(max_length=20, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
