@@ -12,7 +12,7 @@ urlpatterns = [
     path('api/', include('api.urls')), # Incluimos las URLs de nuestra app
     path('psychology/api/', include('psychology_api.urls')),
     path('api/servicios/', include('servicios_web.urls')),
-    # path('api/linkinbio/', include('links.urls')), # Temporalmente comentado por error de dependencia
+    path('api/linkinbio/', include('links.urls')), # Temporalmente comentado por error de dependencia
     path('api/timehub/', include('timehub.urls')),
     path('api/kanban/', include('task_manager.urls')),
     

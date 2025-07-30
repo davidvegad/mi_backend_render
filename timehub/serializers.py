@@ -113,6 +113,7 @@ class PeriodLockSerializer(serializers.ModelSerializer):
 
 class TimeEntrySerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.username', read_only=True)
+    user_details = UserSerializer(source='user', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_code = serializers.CharField(source='project.code', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.username', read_only=True)
@@ -156,11 +157,13 @@ class LeaveTypeSerializer(serializers.ModelSerializer):
 
 class LeaveRequestSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.username', read_only=True)
+    user_details = UserSerializer(source='user', read_only=True)
     leave_type_name = serializers.CharField(source='leave_type.name', read_only=True)
     approved_by_name = serializers.CharField(source='approved_by.username', read_only=True)
     business_days = serializers.SerializerMethodField()
     conflicts = serializers.SerializerMethodField()
     holidays_in_range = serializers.SerializerMethodField()
+    current_projects = serializers.SerializerMethodField()
     
     class Meta:
         model = LeaveRequest
@@ -201,6 +204,33 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
                     )
             except UserProfile.DoesNotExist:
                 pass
+        return []
+
+    def get_current_projects(self, obj):
+        """Obtiene proyectos activos del usuario en las fechas solicitadas"""
+        if obj.start_date and obj.end_date and obj.user:
+            from django.db import models
+            # Buscar asignaciones activas que se solapan con las fechas de vacaciones
+            assignments = Assignment.objects.filter(
+                user=obj.user,
+                is_active=True,
+                start_date__lte=obj.end_date
+            ).filter(
+                models.Q(end_date__isnull=True) | models.Q(end_date__gte=obj.start_date)
+            ).select_related('project', 'project__client')
+            
+            projects = []
+            for assignment in assignments:
+                projects.append({
+                    'project_id': assignment.project.id,
+                    'project_name': assignment.project.name,
+                    'project_code': assignment.project.code,
+                    'client_name': assignment.project.client.name,
+                    'weekly_hours': assignment.weekly_hours_limit,
+                    'assignment_start': assignment.start_date.isoformat() if assignment.start_date else None,
+                    'assignment_end': assignment.end_date.isoformat() if assignment.end_date else None
+                })
+            return projects
         return []
 
     def validate(self, data):

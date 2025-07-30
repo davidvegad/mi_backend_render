@@ -222,6 +222,87 @@ class TimeEntryViewSet(viewsets.ModelViewSet):
                 return Response({'message': 'Time entry rejected successfully'})
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def bulk_approve(self, request):
+        """Bulk approve/reject timesheet entries for a user and week"""
+        user_id = request.data.get('user_id')
+        week_start = request.data.get('week_start')
+        action = request.data.get('action')
+        rejection_reason = request.data.get('rejection_reason', '')
+        
+        if not user_id or not week_start or not action:
+            return Response(
+                {'error': 'user_id, week_start, and action are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if action not in ['approve', 'reject']:
+            return Response(
+                {'error': 'action must be either "approve" or "reject"'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Calculate week end date
+        try:
+            from datetime import datetime, timedelta
+            week_start_date = datetime.strptime(week_start, '%Y-%m-%d').date()
+            week_end_date = week_start_date + timedelta(days=6)
+        except ValueError:
+            return Response(
+                {'error': 'Invalid week_start format. Use YYYY-MM-DD'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        with transaction.atomic():
+            # Get all submitted timesheet entries for the user and week
+            time_entries = TimeEntry.objects.filter(
+                user_id=user_id,
+                local_date__gte=week_start_date,
+                local_date__lte=week_end_date,
+                status='SUBMITTED'
+            )
+            
+            if not time_entries.exists():
+                return Response(
+                    {'error': 'No submitted time entries found for the specified user and week'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            updated_count = 0
+            
+            for entry in time_entries:
+                if action == 'approve':
+                    entry.status = 'APPROVED'
+                    entry.approved_by = request.user
+                    entry.approved_at = timezone.now()
+                    entry.save()
+                    
+                    AuditLog.objects.create(
+                        entity_type='TimeEntry',
+                        entity_id=str(entry.id),
+                        action='BULK_APPROVE',
+                        actor=request.user,
+                        payload={'week_start': week_start}
+                    )
+                    
+                elif action == 'reject':
+                    entry.status = 'REJECTED'
+                    entry.rejection_reason = rejection_reason
+                    entry.save()
+                    
+                    AuditLog.objects.create(
+                        entity_type='TimeEntry',
+                        entity_id=str(entry.id),
+                        action='BULK_REJECT',
+                        actor=request.user,
+                        payload={'rejection_reason': rejection_reason, 'week_start': week_start}
+                    )
+                
+                updated_count += 1
+            
+            message = f'Successfully {action}ed {updated_count} time entries for week {week_start}'
+            return Response({'message': message, 'updated_count': updated_count})
 
 
 class LeaveTypeViewSet(viewsets.ModelViewSet):

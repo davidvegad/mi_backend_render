@@ -4,7 +4,9 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
 from datetime import date, datetime
 import uuid
+from storages.backends.s3boto3 import S3Boto3Storage
 
+s3_storage = S3Boto3Storage()
 
 class Client(models.Model):
     name = models.CharField(max_length=200)
@@ -211,7 +213,7 @@ class LeaveRequest(models.Model):
     end_date = models.DateField()
     days_requested = models.PositiveIntegerField()
     reason = models.TextField()
-    attachment = models.FileField(upload_to='leave_attachments/', null=True, blank=True)
+    attachment = models.FileField(upload_to='leave_attachments/', storage=s3_storage, null=True, blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='DRAFT')
     current_approval_level = models.PositiveIntegerField(default=0)
     approved_by = models.ForeignKey(
