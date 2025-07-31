@@ -11,6 +11,7 @@ s3_storage = S3Boto3Storage()
 class Client(models.Model):
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=50, unique=True)
+    country = models.ForeignKey('Country', on_delete=models.SET_NULL, null=True, blank=True, related_name='clients')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -23,6 +24,19 @@ class Client(models.Model):
 
 
 class Project(models.Model):
+    PROJECT_TYPE_CHOICES = [
+        ('FIXED_PRICE', 'Fixed Price'),
+        ('TIME_MATERIAL', 'Time & Material'),
+        ('RETAINER', 'Retainer'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('CRITICAL', 'Critical'),
+    ]
+
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='projects')
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=50, unique=True)
@@ -37,14 +51,145 @@ class Project(models.Model):
         default=Decimal('0.00'),
         validators=[MinValueValidator(Decimal('0.00')), MaxValueValidator(Decimal('100.00'))]
     )
+    
+    # Campos de seguimiento - se llenan al crear el proyecto
+    approved_hours = models.DecimalField(
+        max_digits=8, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Horas aprobadas para el proyecto"
+    )
+    budget = models.DecimalField(
+        max_digits=12, 
+        decimal_places=2, 
+        null=True, 
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Presupuesto del proyecto"
+    )
+    project_type = models.CharField(
+        max_length=20, 
+        choices=PROJECT_TYPE_CHOICES, 
+        null=True, 
+        blank=True,
+        help_text="Tipo de proyecto"
+    )
+    priority = models.CharField(
+        max_length=10, 
+        choices=PRIORITY_CHOICES, 
+        default='MEDIUM',
+        help_text="Prioridad del proyecto"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def logged_hours(self):
+        """Calcula las horas imputadas (de timesheet) para este proyecto"""
+        return self.time_entries.filter(status='APPROVED').aggregate(
+            total=models.Sum('hours_decimal')
+        )['total'] or Decimal('0.00')
+    
+    @property
+    def hours_percentage(self):
+        """Calcula el % de horas imputadas vs horas aprobadas"""
+        if not self.approved_hours or self.approved_hours == 0:
+            return Decimal('0.00')
+        
+        logged = self.logged_hours
+        percentage = (logged / self.approved_hours) * Decimal('100.00')
+        return round(percentage, 2)
 
     def __str__(self):
         return f"{self.code} - {self.name}"
 
     class Meta:
         ordering = ['code']
+
+
+class ProjectFollowUp(models.Model):
+    STATUS_CHOICES = [
+        ('ON_TRACK', 'En Curso'),
+        ('AT_RISK', 'En Riesgo'),
+        ('DELAYED', 'Retrasado'),
+        ('BLOCKED', 'Bloqueado'),
+        ('COMPLETED', 'Completado'),
+        ('CANCELLED', 'Cancelado'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='follow_ups')
+    follow_up_date = models.DateField(help_text="Fecha de la reunión de seguimiento")
+    
+    # Estado del proyecto en esta reunión
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='ON_TRACK')
+    progress_percentage = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00')), MaxValueValidator(Decimal('100.00'))],
+        help_text="% de avance del proyecto"
+    )
+    observations = models.TextField(help_text="Observaciones de la reunión")
+    
+    # Métricas calculadas al momento de la reunión
+    logged_hours = models.DecimalField(
+        max_digits=8, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Horas imputadas hasta la fecha"
+    )
+    hours_percentage = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="% de horas utilizadas"
+    )
+    
+    # Proyecciones y planes
+    estimated_completion_date = models.DateField(
+        null=True, 
+        blank=True,
+        help_text="Fecha estimada de finalización"
+    )
+    next_milestones = models.TextField(
+        blank=True,
+        help_text="Próximos hitos"
+    )
+    risks = models.TextField(
+        blank=True,
+        help_text="Riesgos identificados"
+    )
+    actions_required = models.TextField(
+        blank=True,
+        help_text="Acciones requeridas"
+    )
+    
+    # Información de la reunión
+    attendees = models.TextField(
+        blank=True,
+        help_text="Asistentes a la reunión"
+    )
+    meeting_notes = models.TextField(
+        blank=True,
+        help_text="Notas adicionales de la reunión"
+    )
+    
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_follow_ups')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.project.code} - Seguimiento {self.follow_up_date} ({self.get_status_display()})"
+
+    class Meta:
+        ordering = ['-follow_up_date']
+        unique_together = ['project', 'follow_up_date']  # Un seguimiento por proyecto por fecha
+        indexes = [
+            models.Index(fields=['project', 'follow_up_date']),
+            models.Index(fields=['status']),
+        ]
 
 
 class Assignment(models.Model):

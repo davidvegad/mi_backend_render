@@ -8,14 +8,14 @@ from django.db import transaction, models
 from django.utils import timezone
 from datetime import datetime, timedelta
 from .models import (
-    Client, Project, Assignment, Period, PeriodLock, TimeEntry,
+    Client, Project, ProjectFollowUp, Assignment, Period, PeriodLock, TimeEntry,
     LeaveType, LeaveRequest, PlannedAllocation, Meeting,
     PortfolioSnapshot, PortfolioSnapshotRow, AllocationSnapshot,
     AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country, Role
 )
 from .serializers import (
-    ClientSerializer, ProjectSerializer, AssignmentSerializer,
-    PeriodSerializer, PeriodLockSerializer, TimeEntrySerializer,
+    ClientSerializer, ProjectSerializer, ProjectFollowUpSerializer, ProjectSummarySerializer,
+    AssignmentSerializer, PeriodSerializer, PeriodLockSerializer, TimeEntrySerializer,
     LeaveTypeSerializer, LeaveRequestSerializer, PlannedAllocationSerializer,
     MeetingSerializer, PortfolioSnapshotSerializer, AllocationSnapshotSerializer,
     UserProfileSerializer, HolidaySerializer, AuditLogSerializer,
@@ -48,7 +48,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        queryset = Project.objects.select_related('client', 'leader')
+        queryset = Project.objects.select_related('client', 'client__country', 'leader')
         is_active = self.request.query_params.get('is_active')
         client_id = self.request.query_params.get('client')
         
@@ -58,6 +58,136 @@ class ProjectViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(client_id=client_id)
             
         return queryset
+    
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        """Endpoint para obtener resumen de proyectos con métricas de seguimiento"""
+        # Filtros
+        is_active = request.query_params.get('is_active')
+        leader = request.query_params.get('leader')
+        client = request.query_params.get('client')
+        priority = request.query_params.get('priority')
+        
+        # Query base
+        queryset = Project.objects.select_related('client', 'client__country', 'leader')
+        
+        # Aplicar filtros
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        if leader:
+            queryset = queryset.filter(leader__username__icontains=leader)
+        if client:
+            queryset = queryset.filter(client__name__icontains=client)
+        if priority:
+            queryset = queryset.filter(priority=priority)
+        
+        # Construir datos del resumen
+        summary_data = []
+        for project in queryset:
+            # Obtener último seguimiento
+            last_follow_up = project.follow_ups.first()  # Ya ordenado por -follow_up_date
+            follow_up_count = project.follow_ups.count()
+            
+            # Calcular tendencias (comparar últimos dos seguimientos)
+            progress_trend = None
+            hours_trend = None
+            
+            if follow_up_count >= 2:
+                follow_ups = list(project.follow_ups.all()[:2])
+                current_follow_up = follow_ups[0]
+                previous_follow_up = follow_ups[1]
+                
+                # Tendencia de progreso
+                progress_diff = current_follow_up.progress_percentage - previous_follow_up.progress_percentage
+                if progress_diff > 0:
+                    progress_trend = 'IMPROVING'
+                elif progress_diff < 0:
+                    progress_trend = 'DECLINING'
+                else:
+                    progress_trend = 'STABLE'
+                
+                # Tendencia de horas
+                hours_diff = current_follow_up.hours_percentage - previous_follow_up.hours_percentage
+                if project.approved_hours:
+                    if current_follow_up.hours_percentage <= 80:
+                        hours_trend = 'UNDER_BUDGET'
+                    elif current_follow_up.hours_percentage <= 100:
+                        hours_trend = 'ON_BUDGET'
+                    else:
+                        hours_trend = 'OVER_BUDGET'
+            
+            summary_data.append({
+                'id': project.id,
+                'code': project.code,
+                'name': project.name,
+                'client_name': project.client.name,
+                'client_country': project.client.country.name if project.client.country else None,
+                'leader_name': project.leader.username if project.leader else 'Sin asignar',
+                'start_date': project.start_date,
+                'end_date': project.end_date,
+                'approved_hours': project.approved_hours,
+                'budget': project.budget,
+                'project_type': project.project_type,
+                'priority': project.priority,
+                'logged_hours': project.logged_hours,
+                'hours_percentage': project.hours_percentage,
+                'is_active': project.is_active,
+                'last_follow_up': ProjectFollowUpSerializer(last_follow_up).data if last_follow_up else None,
+                'follow_up_count': follow_up_count,
+                'progress_trend': progress_trend,
+                'hours_trend': hours_trend,
+            })
+        
+        serializer = ProjectSummarySerializer(summary_data, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'])
+    def metrics(self, request, pk=None):
+        """Endpoint para obtener métricas detalladas de un proyecto"""
+        project = self.get_object()
+        
+        # Calcular métricas adicionales
+        total_assignments = project.assignments.filter(is_active=True).count()
+        total_time_entries = project.time_entries.count()
+        approved_time_entries = project.time_entries.filter(status='APPROVED').count()
+        
+        # Horas por mes (últimos 12 meses)
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        
+        end_date = timezone.now().date()
+        start_date = end_date - timedelta(days=365)
+        
+        monthly_hours = []
+        current_date = start_date.replace(day=1)
+        
+        while current_date <= end_date:
+            next_month = (current_date.replace(day=28) + timedelta(days=4)).replace(day=1)
+            month_hours = project.time_entries.filter(
+                status='APPROVED',
+                local_date__gte=current_date,
+                local_date__lt=next_month
+            ).aggregate(total=models.Sum('hours_decimal'))['total'] or 0
+            
+            monthly_hours.append({
+                'month': current_date.strftime('%Y-%m'),
+                'hours': float(month_hours)
+            })
+            current_date = next_month
+        
+        return Response({
+            'project_id': project.id,
+            'project_code': project.code,
+            'project_name': project.name,
+            'total_assignments': total_assignments,
+            'total_time_entries': total_time_entries,
+            'approved_time_entries': approved_time_entries,
+            'logged_hours': float(project.logged_hours),
+            'hours_percentage': float(project.hours_percentage),
+            'approved_hours': float(project.approved_hours) if project.approved_hours else 0,
+            'budget': float(project.budget) if project.budget else 0,
+            'monthly_hours': monthly_hours,
+        })
 
 
 class AssignmentViewSet(viewsets.ModelViewSet):
@@ -883,3 +1013,51 @@ class ProjectAssignmentViewSet(viewsets.ReadOnlyModelViewSet):
                 })
         
         return Response(project_assignments)
+
+
+class ProjectFollowUpViewSet(viewsets.ModelViewSet):
+    queryset = ProjectFollowUp.objects.all()
+    serializer_class = ProjectFollowUpSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = ProjectFollowUp.objects.select_related('project', 'created_by')
+        project_id = self.request.query_params.get('project')
+        status_filter = self.request.query_params.get('status')
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if date_from:
+            queryset = queryset.filter(follow_up_date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(follow_up_date__lte=date_to)
+            
+        return queryset
+    
+    def perform_create(self, serializer):
+        # Auto-calcular métricas del proyecto al momento de crear el seguimiento
+        project = serializer.validated_data['project']
+        logged_hours = project.logged_hours
+        hours_percentage = project.hours_percentage
+        
+        serializer.save(
+            created_by=self.request.user,
+            logged_hours=logged_hours,
+            hours_percentage=hours_percentage
+        )
+    
+    @action(detail=False, methods=['get'], url_path='by-project/(?P<project_id>[^/.]+)')
+    def by_project(self, request, project_id=None):
+        """Obtener todos los seguimientos de un proyecto específico"""
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response({'error': 'Proyecto no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+        
+        follow_ups = ProjectFollowUp.objects.filter(project=project).select_related('created_by')
+        serializer = self.get_serializer(follow_ups, many=True)
+        return Response(serializer.data)

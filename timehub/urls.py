@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     TimehubTokenObtainPairView,
-    ClientViewSet, ProjectViewSet, AssignmentViewSet, 
+    ClientViewSet, ProjectViewSet, ProjectFollowUpViewSet, AssignmentViewSet, 
     PeriodViewSet, TimeEntryViewSet, LeaveTypeViewSet, 
     LeaveRequestViewSet, PlannedAllocationViewSet, MeetingViewSet,
     UserProfileViewSet, HolidayViewSet, AuditLogViewSet, UserViewSet,
@@ -16,6 +16,7 @@ app_name = 'timehub'
 router = DefaultRouter()
 router.register(r'clients', ClientViewSet)
 router.register(r'projects', ProjectViewSet)
+router.register(r'project-follow-ups', ProjectFollowUpViewSet)
 router.register(r'assignments', AssignmentViewSet)
 router.register(r'periods', PeriodViewSet)
 router.register(r'time-entries', TimeEntryViewSet)

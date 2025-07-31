@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
-    Client, Project, Assignment, Period, PeriodLock, TimeEntry,
+    Client, Project, ProjectFollowUp, Assignment, Period, PeriodLock, TimeEntry,
     LeaveType, LeaveRequest, PlannedAllocation, Meeting,
     PortfolioSnapshot, PortfolioSnapshotRow, AllocationSnapshot,
     AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country, Role
@@ -65,6 +65,9 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class ClientSerializer(serializers.ModelSerializer):
+    country_name = serializers.CharField(source='country.name', read_only=True)
+    country_code = serializers.CharField(source='country.code', read_only=True)
+    
     class Meta:
         model = Client
         fields = '__all__'
@@ -73,12 +76,64 @@ class ClientSerializer(serializers.ModelSerializer):
 
 class ProjectSerializer(serializers.ModelSerializer):
     client_name = serializers.CharField(source='client.name', read_only=True)
+    client_country = serializers.CharField(source='client.country.name', read_only=True)
     leader_name = serializers.CharField(source='leader.username', read_only=True)
+    logged_hours = serializers.SerializerMethodField()
+    hours_percentage = serializers.SerializerMethodField()
     
     class Meta:
         model = Project
         fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'logged_hours', 'hours_percentage']
+    
+    def get_logged_hours(self, obj):
+        return float(obj.logged_hours)
+    
+    def get_hours_percentage(self, obj):
+        return float(obj.hours_percentage)
+
+
+class ProjectFollowUpSerializer(serializers.ModelSerializer):
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    
+    class Meta:
+        model = ProjectFollowUp
+        fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
+
+
+class ProjectSummarySerializer(serializers.Serializer):
+    """Serializer para el resumen de proyectos con métricas de seguimiento"""
+    # Datos del proyecto
+    id = serializers.IntegerField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    client_name = serializers.CharField()
+    client_country = serializers.CharField(allow_null=True)
+    leader_name = serializers.CharField()
+    start_date = serializers.DateField()
+    end_date = serializers.DateField(allow_null=True)
+    
+    # Datos de seguimiento (del proyecto)
+    approved_hours = serializers.DecimalField(max_digits=8, decimal_places=2, allow_null=True)
+    budget = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    project_type = serializers.CharField(allow_null=True)
+    priority = serializers.CharField(allow_null=True)
+    
+    # Métricas calculadas (en tiempo real)
+    logged_hours = serializers.DecimalField(max_digits=8, decimal_places=2)
+    hours_percentage = serializers.DecimalField(max_digits=5, decimal_places=2)
+    is_active = serializers.BooleanField()
+    
+    # Último seguimiento
+    last_follow_up = ProjectFollowUpSerializer(allow_null=True)
+    follow_up_count = serializers.IntegerField()
+    
+    # Tendencias (comparación con seguimiento anterior)
+    progress_trend = serializers.CharField(allow_null=True)
+    hours_trend = serializers.CharField(allow_null=True)
 
 
 class AssignmentSerializer(serializers.ModelSerializer):

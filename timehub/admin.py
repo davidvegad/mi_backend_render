@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Client, Project, Assignment, Period, PeriodLock, TimeEntry,
+    Client, Project, ProjectFollowUp, Assignment, Period, PeriodLock, TimeEntry,
     LeaveType, LeaveRequest, PlannedAllocation, Meeting,
     PortfolioSnapshot, PortfolioSnapshotRow, AllocationSnapshot,
     AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country, Role
@@ -9,17 +9,27 @@ from .models import (
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
-    list_display = ['code', 'name', 'is_active', 'created_at']
-    list_filter = ['is_active', 'created_at']
+    list_display = ['code', 'name', 'country', 'is_active', 'created_at']
+    list_filter = ['is_active', 'country', 'created_at']
     search_fields = ['code', 'name']
 
 
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ['code', 'name', 'client', 'leader', 'progress_percentage', 'is_active']
-    list_filter = ['is_active', 'client', 'start_date']
+    list_display = ['code', 'name', 'client', 'leader', 'priority', 'project_type', 'approved_hours', 'is_active']
+    list_filter = ['is_active', 'priority', 'project_type', 'client', 'start_date']
     search_fields = ['code', 'name', 'client__name']
     raw_id_fields = ['leader']
+
+
+@admin.register(ProjectFollowUp)
+class ProjectFollowUpAdmin(admin.ModelAdmin):
+    list_display = ['project', 'follow_up_date', 'status', 'progress_percentage', 'hours_percentage', 'created_by']
+    list_filter = ['status', 'follow_up_date', 'project']
+    search_fields = ['project__code', 'project__name']
+    raw_id_fields = ['project', 'created_by']
+    ordering = ['-follow_up_date']
+    readonly_fields = ['created_at', 'updated_at']
 
 
 @admin.register(Assignment)
