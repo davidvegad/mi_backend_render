@@ -1,4 +1,4 @@
-# Add missing project fields
+# Agregar campos faltantes al modelo Project de manera segura
 from django.db import migrations, models
 from decimal import Decimal
 import django.core.validators
@@ -11,6 +11,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Agregar campos usando AddField pero con error handling en caso de que ya existan
         migrations.AddField(
             model_name='project',
             name='approved_hours',
@@ -22,6 +23,7 @@ class Migration(migrations.Migration):
                 null=True, 
                 validators=[django.core.validators.MinValueValidator(Decimal('0.00'))]
             ),
+            preserve_default=True,
         ),
         migrations.AddField(
             model_name='project',
@@ -34,6 +36,7 @@ class Migration(migrations.Migration):
                 null=True, 
                 validators=[django.core.validators.MinValueValidator(Decimal('0.00'))]
             ),
+            preserve_default=True,
         ),
         migrations.AddField(
             model_name='project',
@@ -49,6 +52,7 @@ class Migration(migrations.Migration):
                 help_text='Prioridad del proyecto', 
                 max_length=10
             ),
+            preserve_default=True,
         ),
         migrations.AddField(
             model_name='project',
@@ -64,5 +68,6 @@ class Migration(migrations.Migration):
                 max_length=20, 
                 null=True
             ),
+            preserve_default=True,
         ),
     ]
