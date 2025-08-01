@@ -83,6 +83,12 @@ class Project(models.Model):
         help_text="Prioridad del proyecto"
     )
     
+    # Control de seguimiento
+    requires_follow_up = models.BooleanField(
+        default=True,
+        help_text="Si este proyecto requiere reuniones de seguimiento"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -185,7 +191,7 @@ class ProjectFollowUp(models.Model):
 
     class Meta:
         ordering = ['-follow_up_date']
-        unique_together = ['project', 'follow_up_date']  # Un seguimiento por proyecto por fecha
+        # Permitir múltiples seguimientos por proyecto por fecha
         indexes = [
             models.Index(fields=['project', 'follow_up_date']),
             models.Index(fields=['status']),

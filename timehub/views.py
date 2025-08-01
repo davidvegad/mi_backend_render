@@ -68,8 +68,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
         client = request.query_params.get('client')
         priority = request.query_params.get('priority')
         
-        # Query base
-        queryset = Project.objects.select_related('client', 'client__country', 'leader')
+        # Query base - solo proyectos que requieren seguimiento
+        queryset = Project.objects.select_related('client', 'client__country', 'leader').filter(
+            requires_follow_up=True
+        )
         
         # Aplicar filtros
         if is_active is not None:
@@ -116,6 +118,30 @@ class ProjectViewSet(viewsets.ModelViewSet):
                     else:
                         hours_trend = 'OVER_BUDGET'
             
+            # Calcular métricas con manejo de errores
+            try:
+                logged_hours = float(project.logged_hours)
+                hours_percentage = float(project.hours_percentage)
+            except Exception as e:
+                print(f"Error calculando horas para proyecto {project.id}: {e}")
+                logged_hours = 0.0
+                hours_percentage = 0.0
+            
+            # Serializar último seguimiento con manejo de errores
+            last_follow_up_data = None
+            if last_follow_up:
+                try:
+                    last_follow_up_data = {
+                        'id': last_follow_up.id,
+                        'follow_up_date': last_follow_up.follow_up_date,
+                        'status': last_follow_up.status,
+                        'progress_percentage': float(last_follow_up.progress_percentage),
+                        'observations': last_follow_up.observations,
+                    }
+                except Exception as e:
+                    print(f"Error serializando follow-up {last_follow_up.id}: {e}")
+                    last_follow_up_data = None
+            
             summary_data.append({
                 'id': project.id,
                 'code': project.code,
@@ -123,23 +149,23 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 'client_name': project.client.name,
                 'client_country': project.client.country.name if project.client.country else None,
                 'leader_name': project.leader.username if project.leader else 'Sin asignar',
-                'start_date': project.start_date,
-                'end_date': project.end_date,
-                'approved_hours': project.approved_hours,
-                'budget': project.budget,
+                'start_date': project.start_date.isoformat() if project.start_date else None,
+                'end_date': project.end_date.isoformat() if project.end_date else None,
+                'approved_hours': float(project.approved_hours) if project.approved_hours else None,
+                'budget': float(project.budget) if project.budget else None,
                 'project_type': project.project_type,
                 'priority': project.priority,
-                'logged_hours': project.logged_hours,
-                'hours_percentage': project.hours_percentage,
+                'logged_hours': logged_hours,
+                'hours_percentage': hours_percentage,
                 'is_active': project.is_active,
-                'last_follow_up': ProjectFollowUpSerializer(last_follow_up).data if last_follow_up else None,
+                'last_follow_up': last_follow_up_data,
                 'follow_up_count': follow_up_count,
                 'progress_trend': progress_trend,
                 'hours_trend': hours_trend,
             })
         
-        serializer = ProjectSummarySerializer(summary_data, many=True)
-        return Response(serializer.data)
+        # Retornar datos directamente para evitar errores de serialización
+        return Response(summary_data)
     
     @action(detail=True, methods=['get'])
     def metrics(self, request, pk=None):
