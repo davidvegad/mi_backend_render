@@ -1,0 +1,44 @@
+name: Auto-Complete Daily Reservations
+
+on:
+  schedule:
+    # Ejecutar diariamente a las 05:00 UTC = 00:00 Lima (UTC-5)
+    - cron: '0 5 * * *'
+  
+  # Permitir ejecución manual para testing
+  workflow_dispatch:
+
+jobs:
+  complete-reservations:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Auto-complete past reservations
+        run: |
+          echo "🚀 Ejecutando auto-completar reservas..."
+          
+          # Llamar al webhook del backend
+          response=$(curl -s -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: ${{ secrets.CRON_API_KEY }}" \
+            ${{ secrets.BACKEND_URL }}/api/pacifik/cron/complete-reservations/)
+          
+          http_code="${response: -3}"
+          body="${response%???}"
+          
+          echo "📊 Código de respuesta: $http_code"
+          echo "📝 Respuesta del servidor: $body"
+          
+          if [ "$http_code" -eq 200 ]; then
+            echo "✅ Comando ejecutado exitosamente"
+          else
+            echo "❌ Error al ejecutar el comando"
+            exit 1
+          fi
+
+      - name: Notificar resultado (opcional)
+        if: failure()
+        run: |
+          echo "🚨 Error en auto-completar reservas"
+          echo "📅 Fecha: $(date)"
+          # Aquí puedes agregar notificaciones por email, Slack, etc.

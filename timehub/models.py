@@ -738,3 +738,7 @@ class AuditLog(models.Model):
             models.Index(fields=['entity_type', 'entity_id']),
             models.Index(fields=['actor', 'timestamp']),
         ]
+
+
+# Importar modelos del sistema de evaluación
+from .models_evaluation import *

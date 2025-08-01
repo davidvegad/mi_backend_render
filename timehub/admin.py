@@ -6,6 +6,9 @@ from .models import (
     AllocationSnapshotCell, UserProfile, Holiday, AuditLog, Country, Role
 )
 
+# Importar los admin del sistema de evaluación
+from .admin_evaluation import *
+
 
 @admin.register(Client)
 class ClientAdmin(admin.ModelAdmin):
@@ -137,11 +140,40 @@ class HolidayAdmin(admin.ModelAdmin):
 
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
-    list_display = ['name', 'code', 'is_active', 'description', 'created_at']
+    from .forms import RoleAdminForm
+    
+    form = RoleAdminForm
+    list_display = ['name', 'code', 'is_active', 'description', 'permissions_count', 'created_at']
     list_filter = ['is_active', 'created_at']
     search_fields = ['name', 'code', 'description']
     ordering = ['name']
     readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Información Básica', {
+            'fields': ('name', 'code', 'description', 'is_active')
+        }),
+        ('Permisos del Sistema', {
+            'fields': ('permissions',),
+            'classes': ('wide',),
+            'description': 'Selecciona los permisos que tendrá este rol en el sistema'
+        }),
+        ('Información del Sistema', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def permissions_count(self, obj):
+        """Mostrar cantidad de permisos asignados"""
+        count = len(obj.permissions) if obj.permissions else 0
+        return f"{count} permisos"
+    permissions_count.short_description = 'Permisos'
+    
+    class Media:
+        css = {
+            'all': ('admin/css/role_permissions.css',)
+        }
 
 
 @admin.register(AuditLog)

@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'links',
     'timehub',
     'task_manager',
+    'pacifik',
     'rest_framework_simplejwt',
 ]
 

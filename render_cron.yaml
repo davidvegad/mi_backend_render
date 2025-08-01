@@ -1,0 +1,15 @@
+# render_cron.yaml - Configuración de Cron Job para Render
+services:
+  - type: cron
+    name: pacifik-auto-complete
+    env: python
+    schedule: "0 0 * * *"  # Ejecutar diariamente a las 00:00 UTC
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py complete_past_reservations"
+    envVars:
+      - key: DATABASE_URL
+        sync: false  # Usar la misma DB que tu web service
+      - key: SECRET_KEY  
+        sync: false
+      - key: DEBUG
+        value: False

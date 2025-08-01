@@ -1,0 +1,235 @@
+{% load evaluation_filters %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Objetivos Trimestrales</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .email-container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #3FAE29 0%, #359024 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .quarter-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #3FAE29;
+        }
+        .objectives-section {
+            margin-bottom: 30px;
+        }
+        .category-header {
+            background-color: #3FAE29;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .objective-item {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border-left: 3px solid #3FAE29;
+        }
+        .objective-title {
+            font-weight: bold;
+            color: #2d5a27;
+            margin-bottom: 8px;
+        }
+        .objective-description {
+            color: #666;
+            line-height: 1.5;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e9ecef;
+            text-align: center;
+            color: #666;
+        }
+        .contact-info {
+            background-color: #e8f5e8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #2d5a27;
+        }
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            .email-container {
+                padding: 20px;
+            }
+            .info-row {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h1>📊 Objetivos Trimestrales</h1>
+            <p>{{ quarter }}</p>
+        </div>
+
+        <div class="quarter-info">
+            <div class="info-row">
+                <span class="info-label">Empleado:</span>
+                <span>{{ employee.get_full_name }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Rol Asignado:</span>
+                <span>{{ evaluation.role.name }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Supervisor:</span>
+                <span>{{ supervisor.get_full_name }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Período:</span>
+                <span>{{ quarter.start_date|date:"d/m/Y" }} - {{ quarter.end_date|date:"d/m/Y" }}</span>
+            </div>
+        </div>
+
+        {% if evaluation.assignment_notes %}
+        <div class="contact-info">
+            <h3>📝 Notas de Asignación</h3>
+            <p>{{ evaluation.assignment_notes|linebreaks }}</p>
+        </div>
+        {% endif %}
+
+        <p>Estimado/a <strong>{{ employee.first_name }}</strong>,</p>
+        
+        <p>Se han definido tus objetivos para el trimestre <strong>{{ quarter }}</strong>. A continuación encontrarás el detalle de cada objetivo organizado por área de evaluación:</p>
+
+        <!-- Objetivos Técnicos -->
+        {% with technical_objectives=objectives|filter_by_category:"TECHNICAL" %}
+        {% if technical_objectives %}
+        <div class="objectives-section">
+            <div class="category-header">
+                🔧 Desempeño Técnico
+            </div>
+            {% for obj in technical_objectives %}
+            <div class="objective-item">
+                <div class="objective-title">{{ obj.objective.title }}</div>
+                <div class="objective-description">
+                    {{ obj.get_effective_description|linebreaks }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Objetivos de Colaboración -->
+        {% with collaboration_objectives=objectives|filter_by_category:"COLLABORATION" %}
+        {% if collaboration_objectives %}
+        <div class="objectives-section">
+            <div class="category-header">
+                🤝 Colaboración y Equipo
+            </div>
+            {% for obj in collaboration_objectives %}
+            <div class="objective-item">
+                <div class="objective-title">{{ obj.objective.title }}</div>
+                <div class="objective-description">
+                    {{ obj.get_effective_description|linebreaks }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Objetivos de Crecimiento -->
+        {% with growth_objectives=objectives|filter_by_category:"GROWTH" %}
+        {% if growth_objectives %}
+        <div class="objectives-section">
+            <div class="category-header">
+                📚 Formación - Crecimiento
+            </div>
+            {% for obj in growth_objectives %}
+            <div class="objective-item">
+                <div class="objective-title">{{ obj.objective.title }}</div>
+                <div class="objective-description">
+                    {{ obj.get_effective_description|linebreaks }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="contact-info">
+            <h3>📋 Próximos Pasos</h3>
+            <p>Durante este trimestre, trabajaremos juntos para alcanzar estos objetivos. Al finalizar el período, realizaremos una evaluación donde podrás:</p>
+            <ul>
+                <li>Revisar tu progreso en cada objetivo</li>
+                <li>Compartir tus logros y desafíos</li>
+                <li>Recibir retroalimentación constructiva</li>
+                <li>Planificar objetivos para el siguiente trimestre</li>
+            </ul>
+        </div>
+
+        {% if evaluation.attachments.all %}
+        <div class="contact-info">
+            <h3>📎 Documentos Adjuntos</h3>
+            <p>Se han incluido los siguientes documentos de apoyo:</p>
+            <ul>
+            {% for attachment in evaluation.attachments.all %}
+                <li>{{ attachment.filename }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            <p><strong>¿Tienes preguntas?</strong></p>
+            <p>No dudes en contactar a tu supervisor <strong>{{ supervisor.get_full_name }}</strong> 
+            {% if supervisor.email %}({{ supervisor.email }}){% endif %} 
+            para cualquier aclaración sobre estos objetivos.</p>
+            
+            <p style="margin-top: 30px; font-size: 12px; color: #999;">
+                Este email fue generado automáticamente por el sistema TimeHub.<br>
+                Fecha de envío: {{ evaluation.objectives_sent_date|date:"d/m/Y H:i" }}
+            </p>
+        </div>
+    </div>
+</body>
+</html>

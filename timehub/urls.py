@@ -41,4 +41,7 @@ urlpatterns = [
     
     # API endpoints
     path('v1/', include(router.urls)),
+    
+    # Evaluation system endpoints
+    path('v1/', include('timehub.urls_evaluation')),
 ]

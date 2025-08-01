@@ -1,0 +1,53 @@
+name: Test Cron Job (Manual)
+
+# Solo ejecutar manualmente para testing
+on:
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Modo de prueba'
+        required: false
+        default: 'true'
+
+jobs:
+  test-cron:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Test webhook connection
+        run: |
+          echo "🧪 Probando conexión al webhook..."
+          echo "🌐 URL: ${{ secrets.BACKEND_URL }}/api/pacifik/cron/complete-reservations/"
+          
+          # Probar conexión sin API key primero
+          echo "📡 Probando acceso sin API key (debe fallar)..."
+          response=$(curl -s -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            ${{ secrets.BACKEND_URL }}/api/pacifik/cron/complete-reservations/ || echo "000")
+          
+          http_code="${response: -3}"
+          echo "📊 Código sin API key: $http_code"
+          
+          # Probar con API key
+          echo "🔐 Probando con API key..."
+          response=$(curl -s -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: ${{ secrets.CRON_API_KEY }}" \
+            ${{ secrets.BACKEND_URL }}/api/pacifik/cron/complete-reservations/)
+          
+          http_code="${response: -3}"
+          body="${response%???}"
+          
+          echo "📊 Código con API key: $http_code"
+          echo "📝 Respuesta completa: $body"
+          
+          if [ "$http_code" -eq 200 ]; then
+            echo "✅ Test exitoso - El cron job funcionará correctamente"
+          else
+            echo "❌ Test fallido - Revisar configuración"
+            echo "🔍 Posibles problemas:"
+            echo "   - BACKEND_URL incorrecto"
+            echo "   - CRON_API_KEY incorrecto"
+            echo "   - Servidor backend no disponible"
+            exit 1
+          fi

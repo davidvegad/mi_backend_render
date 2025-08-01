@@ -15,5 +15,6 @@ urlpatterns = [
     path('api/linkinbio/', include('links.urls')), # Temporalmente comentado por error de dependencia
     path('api/timehub/', include('timehub.urls')),
     path('api/kanban/', include('task_manager.urls')),
+    path('api/pacifik/', include('pacifik.urls')),
     
 ]

@@ -1,0 +1,97 @@
+/* Estilos para el widget de permisos de roles */
+
+.permissions-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    background-color: #f9f9f9;
+}
+
+.permissions-checkboxes label {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background-color: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.permissions-checkboxes label:hover {
+    background-color: #f0f8ff;
+    border-color: #0073aa;
+}
+
+.permissions-checkboxes input[type="checkbox"] {
+    margin-right: 8px;
+    margin-top: 0;
+}
+
+.permissions-checkboxes input[type="checkbox"]:checked + span {
+    font-weight: 600;
+    color: #0073aa;
+}
+
+/* Agrupación visual por categorías */
+.permissions-checkboxes label[for*="timesheet"] {
+    border-left: 4px solid #2196F3;
+}
+
+.permissions-checkboxes label[for*="project"] {
+    border-left: 4px solid #9C27B0;
+}
+
+.permissions-checkboxes label[for*="leave"] {
+    border-left: 4px solid #FF9800;
+}
+
+.permissions-checkboxes label[for*="approval"] {
+    border-left: 4px solid #4CAF50;
+}
+
+.permissions-checkboxes label[for*="report"] {
+    border-left: 4px solid #795548;
+}
+
+.permissions-checkboxes label[for*="configuration"],
+.permissions-checkboxes label[for*="admin"],
+.permissions-checkboxes label[for*="users"] {
+    border-left: 4px solid #F44336;
+}
+
+.permissions-checkboxes label[for*="evaluation"],
+.permissions-checkboxes label[for*="objective"] {
+    border-left: 4px solid #673AB7;
+}
+
+/* Mejorar la sección de permisos en el formulario */
+.field-permissions .help {
+    background-color: #e8f4fd;
+    border: 1px solid #b3d9f2;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: #333;
+}
+
+.field-permissions .help:before {
+    content: "💡 ";
+    font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .permissions-checkboxes {
+        grid-template-columns: 1fr;
+        max-height: 300px;
+    }
+}

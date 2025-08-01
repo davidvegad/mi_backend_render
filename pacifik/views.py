@@ -1,0 +1,285 @@
+from rest_framework import generics, status, permissions
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.contrib.auth.models import User
+from django.utils import timezone
+from datetime import datetime, timedelta
+from collections import defaultdict
+import calendar
+import os
+
+from .models import Area, UserProfile, Reserva
+from .serializers import (
+    UserRegistrationSerializer, UserProfileSerializer, AreaSerializer,
+    ReservaSerializer, ReservaCreateSerializer, ReservaListSerializer,
+    DisponibilidadSerializer, HorarioDisponibleSerializer
+)
+
+
+class UserRegistrationView(generics.CreateAPIView):
+    """Vista para registro de usuarios"""
+    queryset = User.objects.all()
+    serializer_class = UserRegistrationSerializer
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        
+        return Response({
+            'message': 'Usuario registrado exitosamente',
+            'user_id': user.id,
+            'email': user.email
+        }, status=status.HTTP_201_CREATED)
+
+
+class UserProfileView(generics.RetrieveAPIView):
+    """Vista para obtener el perfil del usuario autenticado"""
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        profile, created = UserProfile.objects.get_or_create(
+            user=self.request.user,
+            defaults={'numero_departamento': ''}
+        )
+        return profile
+
+
+class AreaListCreateView(generics.ListCreateAPIView):
+    """Vista para listar y crear áreas comunes"""
+    queryset = Area.objects.filter(activa=True)
+    serializer_class = AreaSerializer
+    
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsAdminUser()]
+        return [IsAuthenticated()]
+
+
+class AreaDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Vista para detalles, actualizar y eliminar áreas"""
+    queryset = Area.objects.all()
+    serializer_class = AreaSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [IsAuthenticated(), IsAdminUser()]
+        return [IsAuthenticated()]
+
+    def destroy(self, request, *args, **kwargs):
+        # Soft delete
+        area = self.get_object()
+        area.activa = False
+        area.save()
+        return Response({'message': 'Área desactivada exitosamente'})
+
+
+class ReservaListCreateView(generics.ListCreateAPIView):
+    """Vista para listar reservas del usuario y crear nuevas"""
+    permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return ReservaCreateSerializer
+        return ReservaListSerializer
+    
+    def get_queryset(self):
+        return Reserva.objects.filter(
+            usuario=self.request.user
+        ).select_related('area', 'usuario__profile_pacifik')
+
+
+class ReservaDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Vista para detalles y manejo de reservas individuales"""
+    serializer_class = ReservaSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Reserva.objects.filter(usuario=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        # Cancelar reserva en lugar de eliminarla
+        reserva = self.get_object()
+        reserva.estado = 'cancelado'
+        reserva.save()
+        return Response({'message': 'Reserva cancelada exitosamente'})
+    
+
+
+class AdminReservaListView(generics.ListAPIView):
+    """Vista para que los administradores vean todas las reservas"""
+    serializer_class = ReservaListSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # Verificar si el usuario es administrador
+        if not hasattr(self.request.user, 'profile_pacifik') or not self.request.user.profile_pacifik.es_administrador:
+            return Reserva.objects.none()
+        
+        queryset = Reserva.objects.select_related('area', 'usuario__profile_pacifik')
+        
+        # Filtros opcionales
+        area_id = self.request.query_params.get('area')
+        fecha_inicio = self.request.query_params.get('fecha_inicio')
+        fecha_fin = self.request.query_params.get('fecha_fin')
+        departamento = self.request.query_params.get('departamento')
+        
+        if area_id:
+            queryset = queryset.filter(area_id=area_id)
+        
+        if fecha_inicio:
+            queryset = queryset.filter(fecha__gte=fecha_inicio)
+        
+        if fecha_fin:
+            queryset = queryset.filter(fecha__lte=fecha_fin)
+        
+        if departamento:
+            queryset = queryset.filter(usuario__profile_pacifik__numero_departamento=departamento)
+        
+        return queryset
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def consultar_disponibilidad(request):
+    """Endpoint para consultar disponibilidad de horarios"""
+    serializer = DisponibilidadSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    
+    area_id = serializer.validated_data['area_id']
+    fecha = serializer.validated_data['fecha']
+    
+    try:
+        area = Area.objects.get(id=area_id, activa=True)
+    except Area.DoesNotExist:
+        return Response({'error': 'Área no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Obtener día de la semana
+    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+    dia_semana = dias_semana[fecha.weekday()]
+    
+    # Obtener horarios permitidos para este día
+    horarios_permitidos = area.get_horarios_para_dia(dia_semana)
+    
+    if not horarios_permitidos:
+        return Response({
+            'area': area.nombre,
+            'fecha': fecha,
+            'horarios_disponibles': []
+        })
+    
+    # Obtener reservas existentes para esta fecha y área
+    reservas_existentes = Reserva.objects.filter(
+        area=area,
+        fecha=fecha,
+        estado='reservado'
+    )
+    
+    # Calcular disponibilidad para cada horario
+    horarios_disponibles = []
+    
+    for horario_str in horarios_permitidos:
+        try:
+            inicio_str, fin_str = horario_str.split('-')
+            horario_inicio = datetime.strptime(inicio_str.strip(), '%H:%M').time()
+            horario_fin = datetime.strptime(fin_str.strip(), '%H:%M').time()
+            
+            # Contar reservas que se solapan con este horario
+            reservas_solapadas = reservas_existentes.filter(
+                horario_inicio__lt=horario_fin,
+                horario_fin__gt=horario_inicio
+            ).count()
+            
+            cupos_disponibles = max(0, area.cupos_por_horario - reservas_solapadas)
+            
+            horarios_disponibles.append({
+                'horario_inicio': horario_inicio,
+                'horario_fin': horario_fin,
+                'cupos_disponibles': cupos_disponibles,
+                'cupos_totales': area.cupos_por_horario
+            })
+            
+        except ValueError:
+            continue  # Saltar horarios con formato inválido
+    
+    return Response({
+        'area': area.nombre,
+        'fecha': fecha,
+        'horarios_disponibles': horarios_disponibles
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def estadisticas_usuario(request):
+    """Estadísticas del usuario actual"""
+    usuario = request.user
+    
+    # Contar reservas por estado
+    total_reservas = Reserva.objects.filter(usuario=usuario).count()
+    reservas_activas = Reserva.objects.filter(usuario=usuario, estado='reservado').count()
+    reservas_completadas = Reserva.objects.filter(usuario=usuario, estado='completado').count()
+    reservas_canceladas = Reserva.objects.filter(usuario=usuario, estado='cancelado').count()
+    
+    # Próximas reservas
+    proximas_reservas = Reserva.objects.filter(
+        usuario=usuario,
+        estado='reservado',
+        fecha__gte=timezone.now().date()
+    ).order_by('fecha', 'horario_inicio')[:5]
+    
+    return Response({
+        'total_reservas': total_reservas,
+        'reservas_activas': reservas_activas,
+        'reservas_completadas': reservas_completadas,
+        'reservas_canceladas': reservas_canceladas,
+        'proximas_reservas': ReservaListSerializer(proximas_reservas, many=True).data
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # Temporal - en producción usar API key
+def auto_complete_reservations_webhook(request):
+    """Endpoint para auto-completar reservas (para cron externos)"""
+    from django.core.management import call_command
+    from io import StringIO
+    
+    # Verificar API key (opcional, para seguridad)
+    api_key = request.headers.get('X-API-Key')
+    expected_key = os.environ.get('CRON_API_KEY', 'default-key')
+    
+    if api_key != expected_key:
+        return Response({'error': 'API Key inválida'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        # Capturar output del comando
+        out = StringIO()
+        call_command('complete_past_reservations', stdout=out)
+        output = out.getvalue()
+        
+        return Response({
+            'success': True,
+            'message': 'Comando ejecutado exitosamente',
+            'output': output
+        })
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class IsAdminUser(permissions.BasePermission):
+    """Permiso personalizado para verificar si el usuario es administrador"""
+    
+    def has_permission(self, request, view):
+        return (
+            request.user and 
+            request.user.is_authenticated and
+            hasattr(request.user, 'profile_pacifik') and
+            request.user.profile_pacifik.es_administrador
+        )
