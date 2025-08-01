@@ -241,6 +241,41 @@ def estadisticas_usuario(request):
     })
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def todas_las_reservas(request):
+    """Lista todas las reservas del edificio para cualquier usuario"""
+    # Filtros opcionales
+    area_id = request.GET.get('area')
+    fecha = request.GET.get('fecha')
+    estado = request.GET.get('estado')
+    departamento = request.GET.get('departamento')
+    
+    # Query base con select_related para optimizar
+    reservas = Reserva.objects.select_related('usuario', 'area', 'usuario__profile_pacifik').all()
+    
+    # Aplicar filtros solo si tienen valor
+    if area_id and area_id.strip():
+        reservas = reservas.filter(area_id=area_id)
+    if fecha and fecha.strip():
+        reservas = reservas.filter(fecha=fecha)
+    if estado and estado.strip():
+        reservas = reservas.filter(estado=estado)
+    if departamento and departamento.strip():
+        reservas = reservas.filter(usuario__profile_pacifik__numero_departamento__icontains=departamento)
+    
+    # Ordenar por fecha y hora
+    reservas = reservas.order_by('-fecha', '-horario_inicio')
+    
+    # Limitar resultados para performance
+    reservas = reservas[:100]
+    
+    return Response({
+        'reservas': ReservaListSerializer(reservas, many=True).data,
+        'total': reservas.count()
+    })
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])  # Temporal - en producción usar API key
 def auto_complete_reservations_webhook(request):

@@ -22,6 +22,9 @@ urlpatterns = [
     # Estadísticas
     path('estadisticas/', views.estadisticas_usuario, name='estadisticas-usuario'),
     
+    # Reservas públicas
+    path('reservas/todas/', views.todas_las_reservas, name='todas-las-reservas'),
+    
     # Admin endpoints
     path('admin/reservas/', views.AdminReservaListView.as_view(), name='admin-reservas'),
     

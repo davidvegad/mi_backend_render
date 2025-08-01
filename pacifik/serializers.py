@@ -109,10 +109,17 @@ class AreaSerializer(serializers.ModelSerializer):
 class ReservaSerializer(serializers.ModelSerializer):
     """Serializer para las reservas"""
     usuario_nombre = serializers.CharField(source='usuario.get_full_name', read_only=True)
-    usuario_departamento = serializers.CharField(source='usuario.profile_pacifik.numero_departamento', read_only=True)
+    usuario_departamento = serializers.SerializerMethodField()
     area_nombre = serializers.CharField(source='area.nombre', read_only=True)
     duracion_horas = serializers.ReadOnlyField()
     esta_activa = serializers.ReadOnlyField()
+    
+    def get_usuario_departamento(self, obj):
+        """Obtener departamento del usuario de forma segura"""
+        try:
+            return obj.usuario.profile_pacifik.numero_departamento
+        except:
+            return "N/A"
 
     class Meta:
         model = Reserva
@@ -210,8 +217,15 @@ class ReservaCreateSerializer(ReservaSerializer):
 class ReservaListSerializer(serializers.ModelSerializer):
     """Serializer optimizado para listar reservas"""
     usuario_nombre = serializers.CharField(source='usuario.get_full_name', read_only=True)
-    usuario_departamento = serializers.CharField(source='usuario.profile_pacifik.numero_departamento', read_only=True)
+    usuario_departamento = serializers.SerializerMethodField()
     area_nombre = serializers.CharField(source='area.nombre', read_only=True)
+    
+    def get_usuario_departamento(self, obj):
+        """Obtener departamento del usuario de forma segura"""
+        try:
+            return obj.usuario.profile_pacifik.numero_departamento
+        except:
+            return "N/A"
 
     class Meta:
         model = Reserva
