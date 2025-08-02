@@ -244,7 +244,14 @@ def estadisticas_usuario(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def todas_las_reservas(request):
-    """Lista todas las reservas del edificio para cualquier usuario"""
+    """Lista todas las reservas del edificio con paginación y filtros optimizados"""
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+    
+    # Parámetros de paginación
+    page = int(request.GET.get('page', 1))
+    page_size = int(request.GET.get('page_size', 20))
+    
     # Filtros opcionales
     area_id = request.GET.get('area')
     fecha = request.GET.get('fecha')
@@ -252,9 +259,9 @@ def todas_las_reservas(request):
     departamento = request.GET.get('departamento')
     
     # Query base con select_related para optimizar
-    reservas = Reserva.objects.select_related('usuario', 'area', 'usuario__profile_pacifik').all()
+    reservas = Reserva.objects.select_related('usuario', 'area', 'usuario__profile_pacifik')
     
-    # Aplicar filtros solo si tienen valor
+    # Aplicar filtros
     if area_id and area_id.strip():
         reservas = reservas.filter(area_id=area_id)
     if fecha and fecha.strip():
@@ -262,17 +269,42 @@ def todas_las_reservas(request):
     if estado and estado.strip():
         reservas = reservas.filter(estado=estado)
     if departamento and departamento.strip():
-        reservas = reservas.filter(usuario__profile_pacifik__numero_departamento__icontains=departamento)
+        reservas = reservas.filter(
+            usuario__profile_pacifik__numero_departamento__icontains=departamento
+        )
     
-    # Ordenar por fecha y hora
-    reservas = reservas.order_by('-fecha', '-horario_inicio')
+    # Ordenar: si es fecha de hoy y estado reservado, ordenar por hora ascendente
+    # En otros casos, ordenar por fecha y hora descendente
+    fecha_hoy = timezone.localtime().date()
+    if (fecha and fecha.strip() == str(fecha_hoy) and 
+        estado and estado.strip() == 'reservado'):
+        reservas = reservas.order_by('horario_inicio')  # orden ascendente por hora para hoy
+    else:
+        reservas = reservas.order_by('-fecha', '-horario_inicio')  # orden descendente para otros casos
     
-    # Limitar resultados para performance
-    reservas = reservas[:100]
+    # Aplicar paginación
+    paginator = Paginator(reservas, page_size)
+    
+    # Validar número de página
+    if page < 1:
+        page = 1
+    if page > paginator.num_pages and paginator.num_pages > 0:
+        page = paginator.num_pages
+    
+    page_obj = paginator.get_page(page)
     
     return Response({
-        'reservas': ReservaListSerializer(reservas, many=True).data,
-        'total': reservas.count()
+        'reservas': ReservaListSerializer(page_obj.object_list, many=True).data,
+        'pagination': {
+            'current_page': page,
+            'total_pages': paginator.num_pages,
+            'total_items': paginator.count,
+            'page_size': page_size,
+            'has_next': page_obj.has_next(),
+            'has_previous': page_obj.has_previous(),
+            'next_page': page + 1 if page_obj.has_next() else None,
+            'previous_page': page - 1 if page_obj.has_previous() else None
+        }
     })
 
 
