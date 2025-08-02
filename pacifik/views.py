@@ -347,12 +347,16 @@ def auto_complete_reservations_webhook(request):
     from django.core.management import call_command
     from io import StringIO
     
-    # Verificar API key (opcional, para seguridad)
-    api_key = request.headers.get('X-API-Key')
+    # Verificar API key desde Authorization header
+    auth_header = request.headers.get('Authorization', '')
+    api_key = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
     expected_key = os.environ.get('CRON_API_KEY', 'default-key')
     
-    if api_key != expected_key:
-        return Response({'error': 'API Key inválida'}, status=status.HTTP_401_UNAUTHORIZED)
+    if not api_key or api_key != expected_key:
+        return Response({
+            'error': 'API Key inválida o faltante',
+            'detail': 'Incluye Authorization: Bearer <tu-api-key> en el header'
+        }, status=status.HTTP_401_UNAUTHORIZED)
     
     try:
         # Capturar output del comando
