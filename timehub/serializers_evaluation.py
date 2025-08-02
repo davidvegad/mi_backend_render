@@ -110,6 +110,7 @@ class EvaluationAttachmentSerializer(serializers.ModelSerializer):
 
 
 class EvaluationObjectiveSerializer(serializers.ModelSerializer):
+    objective = serializers.PrimaryKeyRelatedField(read_only=True)
     objective_title = serializers.CharField(source='objective.title', read_only=True)
     objective_category = serializers.CharField(source='objective.category.display_name', read_only=True)
     objective_category_code = serializers.CharField(source='objective.category.name', read_only=True)

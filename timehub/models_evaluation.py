@@ -109,6 +109,7 @@ class EmployeeEvaluation(models.Model):
     """Evaluación asignada a un empleado para un trimestre específico"""
     STATUSES = [
         ('ASSIGNED', 'Objetivos Asignados'),
+        ('OBJECTIVES_SENT', 'Objetivos Enviados'),
         ('IN_PROGRESS', 'En Progreso'),
         ('PENDING_REVIEW', 'Pendiente de Revisión'),
         ('COMPLETED', 'Completada'),
