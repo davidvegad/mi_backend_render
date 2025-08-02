@@ -1,5 +1,5 @@
 from rest_framework import generics, status, permissions
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.models import User
@@ -341,7 +341,8 @@ def todas_las_reservas(request):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])  # Temporal - en producción usar API key
+@authentication_classes([])  # Sin autenticación JWT
+@permission_classes([AllowAny])
 def auto_complete_reservations_webhook(request):
     """Endpoint para auto-completar reservas (para cron externos)"""
     from django.core.management import call_command
