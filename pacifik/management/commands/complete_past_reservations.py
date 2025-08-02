@@ -9,7 +9,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # Obtener la fecha de ayer
-        ayer = timezone.now().date() - timedelta(days=1)
+        ayer = timezone.now().date() #- timedelta(days=1)
         
         # Buscar reservas del día anterior que estén en estado 'reservado'
         reservas_a_completar = Reserva.objects.filter(
