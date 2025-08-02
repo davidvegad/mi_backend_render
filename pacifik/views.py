@@ -352,10 +352,22 @@ def auto_complete_reservations_webhook(request):
     api_key = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
     expected_key = os.environ.get('CRON_API_KEY', 'default-key')
     
+    # Debug logs (remover en producción)
+    print(f"🔍 DEBUG - Auth header recibido: '{auth_header[:20]}...' (primeros 20 chars)")
+    print(f"🔍 DEBUG - API key extraída: '{api_key[:10]}...' (primeros 10 chars)")
+    print(f"🔍 DEBUG - Expected key: '{expected_key[:10]}...' (primeros 10 chars)")
+    print(f"🔍 DEBUG - Keys match: {api_key == expected_key}")
+    
     if not api_key or api_key != expected_key:
         return Response({
             'error': 'API Key inválida o faltante',
-            'detail': 'Incluye Authorization: Bearer <tu-api-key> en el header'
+            'detail': f'Header recibido: {auth_header[:30]}... | Expected: {expected_key[:10]}...',
+            'debug': {
+                'has_auth_header': bool(auth_header),
+                'has_bearer_prefix': auth_header.startswith('Bearer '),
+                'api_key_length': len(api_key),
+                'expected_key_length': len(expected_key)
+            }
         }, status=status.HTTP_401_UNAUTHORIZED)
     
     try:
