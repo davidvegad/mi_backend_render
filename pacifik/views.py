@@ -347,20 +347,33 @@ def auto_complete_reservations_webhook(request):
     """Endpoint para auto-completar reservas (para cron externos)"""
     from django.core.management import call_command
     from io import StringIO
+    import json
+    
+    # Logs detallados de request
+    print(f"🚀 CRON WEBHOOK INICIADO - {timezone.now()}")
+    print(f"🔍 Método: {request.method}")
+    print(f"🔍 Path: {request.path}")
+    print(f"🔍 Headers recibidos:")
+    for header, value in request.headers.items():
+        if 'authorization' in header.lower():
+            print(f"   {header}: {value[:20]}... (truncado)")
+        else:
+            print(f"   {header}: {value}")
     
     # Verificar API key desde Authorization header
     auth_header = request.headers.get('Authorization', '')
     api_key = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
     expected_key = os.environ.get('CRON_API_KEY', 'default-key')
     
-    # Debug logs (remover en producción)
-    print(f"🔍 DEBUG - Auth header recibido: '{auth_header[:20]}...' (primeros 20 chars)")
-    print(f"🔍 DEBUG - API key extraída: '{api_key[:10]}...' (primeros 10 chars)")
-    print(f"🔍 DEBUG - Expected key: '{expected_key[:10]}...' (primeros 10 chars)")
-    print(f"🔍 DEBUG - Keys match: {api_key == expected_key}")
+    # Debug logs de autenticación
+    print(f"🔐 AUTENTICACIÓN:")
+    print(f"   Auth header recibido: '{auth_header[:20]}...' (primeros 20 chars)")
+    print(f"   API key extraída: '{api_key[:10]}...' (primeros 10 chars)")
+    print(f"   Expected key: '{expected_key[:10]}...' (primeros 10 chars)")
+    print(f"   Keys match: {api_key == expected_key}")
     
     if not api_key or api_key != expected_key:
-        return Response({
+        error_response = {
             'error': 'API Key inválida o faltante',
             'detail': f'Header recibido: {auth_header[:30]}... | Expected: {expected_key[:10]}...',
             'debug': {
@@ -369,7 +382,11 @@ def auto_complete_reservations_webhook(request):
                 'api_key_length': len(api_key),
                 'expected_key_length': len(expected_key)
             }
-        }, status=status.HTTP_401_UNAUTHORIZED)
+        }
+        print(f"❌ AUTENTICACIÓN FALLIDA: {json.dumps(error_response, indent=2)}")
+        return Response(error_response, status=status.HTTP_401_UNAUTHORIZED)
+    
+    print(f"✅ AUTENTICACIÓN EXITOSA - Ejecutando comando...")
     
     try:
         # Capturar output del comando
@@ -377,16 +394,32 @@ def auto_complete_reservations_webhook(request):
         call_command('complete_past_reservations', stdout=out)
         output = out.getvalue()
         
-        return Response({
+        print(f"📋 SALIDA DEL COMANDO:")
+        print(output)
+        
+        response_data = {
             'success': True,
             'message': 'Comando ejecutado exitosamente',
-            'output': output
-        })
+            'output': output,
+            'timestamp': timezone.now().isoformat(),
+            'endpoint_info': {
+                'method': request.method,
+                'path': request.path,
+                'user_agent': request.headers.get('User-Agent', 'N/A')
+            }
+        }
+        
+        print(f"✅ RESPUESTA EXITOSA: {json.dumps(response_data, indent=2, default=str)}")
+        return Response(response_data)
+        
     except Exception as e:
-        return Response({
+        error_response = {
             'success': False,
-            'error': str(e)
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            'error': str(e),
+            'timestamp': timezone.now().isoformat()
+        }
+        print(f"💥 ERROR EN COMANDO: {json.dumps(error_response, indent=2, default=str)}")
+        return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class IsAdminUser(permissions.BasePermission):
