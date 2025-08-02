@@ -53,13 +53,21 @@ class UserProfileSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(source='user.first_name', read_only=True)
     last_name = serializers.CharField(source='user.last_name', read_only=True)
     full_name = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = UserProfile
-        fields = ['email', 'first_name', 'last_name', 'full_name', 'numero_departamento', 'es_administrador']
+        fields = [
+            'email', 'first_name', 'last_name', 'full_name', 'numero_departamento', 
+            'es_administrador', 'role', 'permissions'
+        ]
 
     def get_full_name(self, obj):
         return obj.user.get_full_name()
+    
+    def get_permissions(self, obj):
+        """Incluir todos los permisos del usuario"""
+        return obj.get_permissions()
 
 
 class AreaSerializer(serializers.ModelSerializer):

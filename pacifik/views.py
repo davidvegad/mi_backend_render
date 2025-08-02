@@ -91,6 +91,24 @@ class ReservaListCreateView(generics.ListCreateAPIView):
         return Reserva.objects.filter(
             usuario=self.request.user
         ).select_related('area', 'usuario__profile_pacifik')
+    
+    def create(self, request, *args, **kwargs):
+        """Crear nueva reserva con validación de permisos"""
+        # Verificar si el usuario tiene permisos para hacer reservas
+        try:
+            profile = request.user.profile_pacifik
+            if not profile.can_reserve():
+                return Response({
+                    'error': 'No tienes permisos para crear reservas',
+                    'detail': 'Tu cuenta está configurada solo para visualización. Contacta al administrador si necesitas hacer una reserva.',
+                    'user_role': profile.role
+                }, status=status.HTTP_403_FORBIDDEN)
+        except AttributeError:
+            return Response({
+                'error': 'Perfil de usuario no configurado'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        return super().create(request, *args, **kwargs)
 
 
 class ReservaDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -147,6 +165,20 @@ class AdminReservaListView(generics.ListAPIView):
 @permission_classes([IsAuthenticated])
 def consultar_disponibilidad(request):
     """Endpoint para consultar disponibilidad de horarios"""
+    # Verificar permisos para consultar disponibilidad
+    try:
+        profile = request.user.profile_pacifik
+        if not profile.can_reserve():
+            return Response({
+                'error': 'No tienes permisos para consultar disponibilidad',
+                'detail': 'Solo los usuarios que pueden hacer reservas pueden consultar disponibilidad.',
+                'user_role': profile.role
+            }, status=status.HTTP_403_FORBIDDEN)
+    except AttributeError:
+        return Response({
+            'error': 'Perfil de usuario no configurado'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
     serializer = DisponibilidadSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     

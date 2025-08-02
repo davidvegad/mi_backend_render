@@ -55,9 +55,32 @@ class Area(models.Model):
 
 class UserProfile(models.Model):
     """Extensión del modelo User para información adicional"""
+    
+    ROLE_CHOICES = [
+        ('resident', 'Residente'),
+        ('supervisor', 'Supervisor'),
+    ]
+    
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile_pacifik')
     numero_departamento = models.CharField(max_length=10)
     es_administrador = models.BooleanField(default=False)
+    
+    # Nuevos campos de rol y permisos
+    role = models.CharField(
+        max_length=20, 
+        choices=ROLE_CHOICES, 
+        default='resident',
+        help_text="Rol del usuario en el sistema"
+    )
+    can_make_reservations = models.BooleanField(
+        default=True,
+        help_text="Si el usuario puede crear reservas"
+    )
+    can_view_all_reservations = models.BooleanField(
+        default=False,
+        help_text="Si el usuario puede ver todas las reservas del edificio"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -65,7 +88,29 @@ class UserProfile(models.Model):
         verbose_name_plural = 'Perfiles de Usuario'
 
     def __str__(self):
-        return f"{self.user.get_full_name()} - Dpto {self.numero_departamento}"
+        return f"{self.user.get_full_name()} - Dpto {self.numero_departamento} ({self.get_role_display()})"
+    
+    def is_supervisor(self):
+        """Verifica si el usuario es supervisor"""
+        return self.role == 'supervisor'
+    
+    def is_resident(self):
+        """Verifica si el usuario es residente"""
+        return self.role == 'resident'
+    
+    def can_reserve(self):
+        """Verifica si el usuario puede hacer reservas"""
+        return self.can_make_reservations and not self.is_supervisor()
+    
+    def get_permissions(self):
+        """Retorna un diccionario con todos los permisos del usuario"""
+        return {
+            'can_make_reservations': self.can_reserve(),
+            'can_view_all_reservations': self.can_view_all_reservations,
+            'role': self.role,
+            'is_supervisor': self.is_supervisor(),
+            'is_resident': self.is_resident()
+        }
 
 
 class Reserva(models.Model):
