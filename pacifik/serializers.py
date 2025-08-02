@@ -133,7 +133,7 @@ class ReservaSerializer(serializers.ModelSerializer):
 
     def validate_fecha(self, value):
         """Validar que la fecha no sea pasada"""
-        if value < timezone.now().date():
+        if value < timezone.localtime().date():
             raise serializers.ValidationError("No se pueden hacer reservas para fechas pasadas")
         return value
 
@@ -159,7 +159,7 @@ class ReservaSerializer(serializers.ModelSerializer):
         
         # Validar que el usuario no tenga otra reserva activa para la misma área
         # (solo reservas de hoy en adelante)
-        hoy = timezone.now().date()
+        hoy = timezone.localtime().date()
         reservas_activas_usuario = Reserva.objects.filter(
             usuario=usuario,
             area=area,
@@ -241,7 +241,9 @@ class DisponibilidadSerializer(serializers.Serializer):
     fecha = serializers.DateField()
     
     def validate_fecha(self, value):
-        if value < timezone.now().date():
+        # Obtener la fecha actual en la zona horaria local (Lima)
+        fecha_actual_lima = timezone.localtime().date()
+        if value < fecha_actual_lima:
             raise serializers.ValidationError("No se puede consultar disponibilidad para fechas pasadas")
         return value
 

@@ -108,8 +108,8 @@ class Reserva(models.Model):
     def clean(self):
         from django.core.exceptions import ValidationError
         
-        # Validar que la fecha no sea pasada
-        if self.fecha < timezone.now().date():
+        # Validar que la fecha no sea pasada (usar zona horaria local)
+        if self.fecha < timezone.localtime().date():
             raise ValidationError("No se pueden hacer reservas para fechas pasadas")
         
         # Validar que el horario de fin sea mayor al de inicio

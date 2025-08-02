@@ -229,7 +229,7 @@ def estadisticas_usuario(request):
     proximas_reservas = Reserva.objects.filter(
         usuario=usuario,
         estado='reservado',
-        fecha__gte=timezone.now().date()
+        fecha__gte=timezone.localtime().date()
     ).order_by('fecha', 'horario_inicio')[:5]
     
     return Response({
